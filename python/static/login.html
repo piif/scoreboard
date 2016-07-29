@@ -1,0 +1,21 @@
+<html>
+<head>
+	<title>ScoreBoard Login</title>
+</head>
+<body>
+	<script src="jquery-3.1.0.js"></script>
+	<script>
+	$( document ).ready(function() {
+		if (window.location.search == "?login_wrong") {
+			$("#message").html("Login unknown or wrong password");
+		}
+	});
+	</script>
+	<div id='message'></div>
+	<form action='/scoreboard/login' method='POST'>
+		Username: <input name="login" type="text" /><br/>
+		Password: <input name="password" type="password" /><br/>
+		<input value="Login" type="submit" />
+	</form>
+</body>
+</html>

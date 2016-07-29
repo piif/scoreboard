@@ -1,0 +1,137 @@
+<html>
+<head>
+	<title>ScoreBoard Main Page</title>
+	<style>
+	.waiting {
+		color: orange;
+	}
+	.onscreen {
+		color: green;
+	}
+	.digitsblock {
+		display: inline-block;
+		margin-left: 3ex;
+		border: solid 1px;
+	}
+	</style>
+</head>
+<body>
+	<script src='/scoreboard/static/jquery-3.1.0.js'></script>
+	<script>
+	function setError(msg) {
+		$("#message").html(msg);
+	}
+	function poll() {
+		var poll_interval=0;
+	
+		$.ajax({
+			url: "/scoreboard/poll",
+			type: 'GET',
+			dataType: 'json',
+			success: function(data) {
+				handleMessage(data);
+				poll_interval=0;
+			},
+			error: function (xhr, status, error) {
+				poll_interval=1000;
+				setError("Poll error : " + status + "/" + error);
+			},
+			complete: function () {
+				setTimeout(poll, poll_interval);
+			},
+		});
+	}
+	function handleMessage(data) {
+		$('#message').html(data)
+	}
+
+	function addScore(name, len) {
+		var html = $('<div>')
+			.addClass('digitsblock')
+			.attr('id', name+'_block');
+		html.append(
+			$('<input>')
+				.addClass('minus')
+				.attr('type', 'button')
+				.attr('id', name+'_minus')
+				.attr('rel', name)
+				.val('-1')
+		);
+		html.append(
+			$('<input>')
+				.addClass('digits')
+				.attr('type', 'text')
+				.attr('id', name)
+				.attr('size', len)
+				.val('0')
+		);
+		html.append(
+			$('<input>')
+				.addClass('plus')
+				.attr('type', 'button')
+				.attr('id', name+'_plus')
+				.attr('rel', name)
+				.val('+1')
+		);
+
+		$('#scores').append(html);
+	}
+
+	$( document ).ready(function() {
+		// add scores button
+		addScore('FL', 1);
+		addScore('BL', 2);
+		addScore('FV', 1);
+		addScore('BV', 2);
+		// handle +/-
+		$('.plus').click(function() {
+			var rel = $(this).attr('rel');
+			var target = $('#'+rel)
+			changeValue(rel, target, 1);
+		});
+		$('.minus').click(function() {
+			var rel = $(this).attr('rel');
+			var target = $('#'+rel)
+			changeValue(rel, target, -1);
+		});
+		// and direct input
+		$('.digits')
+			.focus(function() {
+				$(this).removeClass('waiting').removeClass('onscreen');
+			})
+			.change(function() {
+				var target = $(this);
+				var rel = target.attr('id')
+				changeValue(rel, target);
+			});
+
+		poll('/scoreboard/poll');
+	});
+
+	function changeValue(rel, target, delta) {
+		var value = Number.parseInt(target.val());
+		if (delta != null) {
+			value += delta;
+		}
+
+		$.ajax({
+			url: '/scoreboard/' + rel + '/' + value,
+			type: 'GET',
+			success: function(data) {
+				handleMessage(data);
+			},
+			error: function(xhr, status, error) {
+				setError("Can't set " + rel + " to " + value + " : " + status + "/" + error);
+			}
+		});
+		target.addClass('waiting').removeClass('onscreen');
+	}
+
+	</script>
+	<div id='message'></div>
+
+	<h1>Let's go ...</h1>
+	<div id='chrono'></div>
+	<div id='scores'></div>
+</body>
+</html>
