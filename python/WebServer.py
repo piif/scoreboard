@@ -1,3 +1,12 @@
+# TODO
+# ajouter readme sur dir des icones
+# revoir config portail captif, notamment gerer un dns fake ?
+# jQuery light pour mobile ?
+#  voir deja si ca demarre avec la version slim ?
+# comment debugger le probleme des cookies ?
+# tester sur ecran
+#  -> merger les 2 codes fake/reel
+
 from sys import argv
 from os.path import abspath, dirname
 
@@ -18,18 +27,8 @@ content_dir = root_dir + "/content/"
 # TODO : read a json file with user:password list
 with open(config_dir + "users.json") as json_data:
     users = json.load(json_data)
-with open(config_dir + "chronos.json") as json_data:
-    chronos = json.load(json_data)
-
-sb = ScoreBoard(14, 15)
-
-def sendAll():
-    eventQueue.put({
-        'Minutes': sb.Minutes, 'Seconds': sb.Seconds,
-        'BL': sb.BL, 'FL': sb.FL,
-        'BV': sb.BV, 'FV': sb.FV,
-        'Buzzer': sb.Buzzer
-    })
+# with open(config_dir + "chronos.json") as json_data:
+#     chronos = json.load(json_data)
 
 class Session:
     id = None
@@ -44,6 +43,8 @@ class Session:
 sessions = {}
 
 def getSession(request):
+    #return True
+    print request.cookies.keys()
     id = request.cookies.get('session', None)
     if id is None:
         return None
@@ -88,6 +89,22 @@ def do_login():
 
 eventQueue = queue.Queue()
 
+def updateChrono():
+    eventQueue.put({
+        'Minutes': sb.data["Minutes"], 'Seconds': sb.data["Seconds"]
+    })
+
+
+sb = ScoreBoard(14, 15, onModifiedCallback = updateChrono)
+
+def sendAll():
+    eventQueue.put({
+        'Minutes': sb.data["Minutes"], 'Seconds': sb.data["Seconds"],
+        'BL': sb.data["BL"], 'FL': sb.data["FL"],
+        'BV': sb.data["BV"], 'FV': sb.data["FV"],
+        'Buzzer': sb.data["Buzzer"]
+    })
+
 @route('/scoreboard/poll')
 def poll():
     if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.") 
@@ -102,6 +119,29 @@ def static(path):
     print "static", path
     # send it (method handles file check
     return bottle.static_file(path, root = static_dir)    
+ 
+
+@route('/scoreboard/<action>')
+def action(action):
+    if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.")
+    print "action", action
+    if action == 'refresh':
+        sendAll()
+    elif action == 'pause':
+        sb.stopChrono()
+    elif action == 'play':
+        sb.restartChrono()
+    elif action == 'test':
+        sb.test()
+    elif action == 'blank':
+        sb.blank()
+    elif action == 'reset':
+        sb.reset()
+        sendAll()
+    elif action == 'chronos':
+        return bottle.static_file('chronos.json', root = config_dir)    
+    else:
+        eventQueue.put({error: "Unknown action"})
 
 
 @route('/scoreboard/<action>/<value>')
@@ -111,22 +151,8 @@ def action(action, value):
     if action in ('Minutes', 'Seconds', 'BL', 'FL', 'BV', 'FV', 'Buzzer'):
         sb.set(**{action: value})
         eventQueue.put({action: value})
-    else:
-        eventQueue.put({error: "Unknown action"})
- 
-
-@route('/scoreboard/<action>')
-def action(action):
-    if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.")
-    print "action", action
-    if action == 'refresh':
-        sendAll()
-    elif action == 'test':
-        sb.test()
-    elif action == 'blank':
-        sb.blank()
-    elif action == 'chronos':
-        bottle.static_file('chronos.json', root = config_dir)    
+    elif action == "start":
+        sb.startChrono(int(int(value) / 60), int(value) % 60)
     else:
         eventQueue.put({error: "Unknown action"})
 
@@ -138,7 +164,7 @@ def default(any):
 
 
 def main():
-    bottle.run(port=9090, server="gevent", debug=True)
+    bottle.run(host='0.0.0.0', port=9090, server="gevent", debug=True)
 
 if __name__ == '__main__':
     main()

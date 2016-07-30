@@ -8,19 +8,39 @@
 	.onscreen {
 		color: green;
 	}
-	.digitsblock {
+	.digitsblock, #chrono {
 		display: inline-block;
-		margin-left: 2em;
-		border: solid 1px;
+		margin-bottom: 1ex;
+		padding: 5px;
 	}
-	.digitsblock input {
-		text-align: right;
+	#chrono, #scores  {
+		margin-left: 1em;
+	}
+	.digitsblock input, #chrono input {
+		text-align: center;
 	}
 	#tools {
 		border: dotted 1px gray;
 		position: absolute;
 		right: 0.5em;
 		top: 0.5ex
+	}
+	#scores > div {
+		display: inline-block;
+		border: solid 1px;
+	}
+	label {
+		display: block;
+		text-align: center;
+	}
+	input {
+		width: 3em;
+	}
+	/* icons */
+	img {
+		width: 3ex;
+		padding: 0.5ex;
+		vertical-align: middle;
 	}
 	</style>
 </head>
@@ -29,6 +49,12 @@
 	<script src='/scoreboard/static/jquery-3.1.0.js'></script>
 	<script>
 	var currentPoll = null;
+
+	var chronoList = null;
+
+	function iconpath(action) {
+		return '/scoreboard/static/img/' + action + '.png';
+	}
 
 	function setError(msg) {
 		$("#message").html(msg);
@@ -54,14 +80,6 @@
 		});
 	}
 	function handleMessage(data) {
-		if (data == null) {
-			console.warn("null");
-			return;
-		}
-		if (data == "") {
-			console.warn("empty");
-			return;
-		}
 		console.log(data);
 		for (k in data) {
 			if (k == 'error') {
@@ -72,67 +90,180 @@
 					.removeClass('waiting').addClass('onscreen');
 			}
 		}
-		$('#message').html("<pre>message " + JSON.stringify(data) + "</pre>");
+		if (data.Minutes === 0 && data.Seconds === 0) {
+			playpause("pause");
+		}
+		//$('#message').html("<pre>message " + JSON.stringify(data) + "</pre>");
 	}
 
-	function addScoreButton(name, len) {
+	playpause = function(state) {
+		if (state === "pause") {
+			// send pause
+			send('/scoreboard/pause', "Can't stop chrono");
+			// set icon to 'unpause'
+			$("#playpause")
+				.removeClass('pause').addClass('play')
+				.attr('src', iconpath('play'))
+				.attr('title', 'play')
+		} else if (state === "play") {
+			// send unpause
+			send('/scoreboard/play', "Can't restart chrono");
+			// set icon to 'pause'
+			$("#playpause")
+				.addClass('pause').removeClass('play')
+				.attr('src', iconpath('pause'))
+				.attr('title', 'pause')
+		}
+	}
+
+	function scoreButton(prefix, name, len) {
 		var html = $('<div>')
 			.addClass('digitsblock')
 			.attr('id', name+'_block');
 		html.append(
-			$('<input>')
+			prefix
+			,
+			$('<img>')
 				.addClass('minus')
-				.attr('type', 'button')
+				.attr('src', iconpath('minus'))
 				.attr('id', name+'_minus')
 				.attr('rel', name)
-				.val('-1')
-		);
-		html.append(
+				.attr('title', '-')
+			,
 			$('<input>')
 				.addClass('digits')
 				.attr('type', 'text')
 				.attr('id', name)
 				.attr('size', len)
-				.val('-')
-		);
-		html.append(
-			$('<input>')
+				.val('_'.repeat(len))
+			,
+			$('<img>')
 				.addClass('plus')
-				.attr('type', 'button')
+				.attr('src', iconpath('plus'))
 				.attr('id', name+'_plus')
 				.attr('rel', name)
-				.val('+1')
+				.attr('title', '+')
 		);
 
-		$('#scores').append(html);
+		return html;
+		//$('#scores').append(html);
 	}
 
-	function addToolsButton(action) {
+	function addToolsButton(action, onclick) {
+		if (onclick == null) {
+			onclick = function(){
+				$('.digits').addClass('waiting').removeClass('onscreen');
+				send('/scoreboard/' + action, "Can't " + action);
+			};
+		}
 		$('#tools').append(
-			$('<input>')
-				.attr('type', 'button')
+			$('<img>')
+				.attr('src', iconpath(action))
 				.attr('id', action)
-				.val(action)
+				.attr('title', action)
 				.addClass(action)
-				.click(function(){
-					$('.digits').addClass('waiting').removeClass('onscreen');
-					$.ajax({
-						url: '/scoreboard/' + action,
-						type: 'GET',
-						error: function(xhr, status, error) {
-							setError("Can't " + action + " : " + status + "/" + error);
-						}
-					});
+				.click(onclick)
+		);
+	}
+
+	function updateTimeList() {
+		var value = $("#timelist").val();
+		if (value == "manuel") {
+			$("#startbuttons").html("");
+		} else {
+			var newList = chronoList[value];
+			console.log(newList);
+			$("#startbuttons").html('')
+			for (period in newList) {
+				$("#startbuttons").append( $('<input>')
+					.attr('type', 'button')
+					.attr('id', 'start_' + period)
+					.attr('rel', newList[period])
+					.val(period)
+					.addClass('start')
+					.click(function() {
+						var time = $(this).attr('rel');
+						send('/scoreboard/start/' + time, "Can't start chrono");
+						playpause("play");
+					})
+				);
+			}
+		}
+	}
+
+	function addChrono() {
+		$('#chrono').append(
+			// time list
+			$('<select>')
+				.attr('id', 'timelist')
+				.change(updateTimeList)
+			,
+			// start buttons
+			$('<span>')
+				.attr('id', 'startbuttons')
+			,
+			// digits
+			$('<input>')
+				.attr('type', 'number')
+				.attr('id', 'Minutes')
+				.attr('min', '0').attr('max', '59')
+				.attr('size', '2')
+				.val('__')
+				.addClass('digits')
+			,
+			$('<span> : </span>')
+			,
+			$('<input>')
+				.attr('type', 'number')
+				.attr('id', 'Seconds')
+				.attr('min', '0').attr('max', '59')
+				.attr('size', '2')
+				.val('__')
+				.addClass('digits')
+			,
+			// pause / play
+			$('<img>')
+				.attr('id', 'playpause')
+				.attr('src', iconpath('play'))
+				.attr('title', 'play')
+				.addClass('play')
+				.click(function() {
+					playpause($(this).hasClass('pause') ? "pause" : "play");
 				})
 		);
 	}
 
 	$( document ).ready(function() {
 		// add scores button
-		addScoreButton('FL', 1);
-		addScoreButton('BL', 2);
-		addScoreButton('FV', 1);
-		addScoreButton('BV', 2);
+		$('#scores').append(
+			$("<div><label>Locaux</label></div>").append(
+				scoreButton('<label>fautes</label>', 'FL', 1),
+				scoreButton('<label>buts</label>', 'BL', 2)
+			),
+			$("<div><label>Visiteurs</label></div>").append(
+				scoreButton('<label>fautes</label>', 'FV', 1),
+				scoreButton('<label>buts</label>', 'BV', 2)
+			)
+		);
+
+		addChrono();
+		$.ajax({
+			url: "/scoreboard/chronos",
+			type: 'GET',
+			dataType: 'json',
+			success: function(data) {
+				chronoList = data;
+				list = $("#timelist");
+				list.append( $("<option>").val("manuel").text("manuel") );
+				for (lbl in data) {
+					list.append( $("<option>").val(lbl).text(lbl) );
+				}
+			},
+			error: function (xhr, status, error) {
+				setError("Can't load time list : " + status + "/" + error);
+			}
+		});
+
 		// handle +/-
 		$('.plus').click(function() {
 			var rel = $(this).attr('rel');
@@ -158,7 +289,14 @@
 		addToolsButton('refresh');
 		addToolsButton('test');
 		addToolsButton('blank');
-		// TODO : a button to reload page ?
+		addToolsButton('reset', function() {
+			if (confirm("Tout ré-initialiser ?")) {
+				send('/scoreboard/reset', "Can't reset");
+			}
+		});
+		addToolsButton('reload', function(){
+			window.location.reload();
+		});
 
 		poll('/scoreboard/poll');
 	});
@@ -169,28 +307,25 @@
 			value += delta;
 		}
 
-		$.ajax({
-			url: '/scoreboard/' + rel + '/' + value,
-			type: 'GET',
-			success: function(data) {
-				handleMessage(data);
-			},
-			error: function(xhr, status, error) {
-				setError("Can't set " + rel + " to " + value + " : " + status + "/" + error);
-			}
-		});
+		send('/scoreboard/' + rel + '/' + value, "Can't set " + rel + " to " + value);
 		target.addClass('waiting').removeClass('onscreen');
 	}
 
+	function send(action, errorMessage) {
+		$.ajax({
+			url: action,
+			type: 'GET',
+			error: function(xhr, status, error) {
+				setError(errorMessage + " : " + status + "/" + error);
+			}
+		});
+	}
 	</script>
 	<div id='message'></div>
 	<div id='tools'></div>
 
-	<h1>Let's go ...</h1>
-	<div id='chrono' class="digitsblock">
-		<input id="Minutes" class="digits" type="text" size="2" value="--">&nbsp;:&nbsp;
-		<input id="Seconds" class="digits" type="text" size="2" value="--">
-	</div>
+	<h1>Score board</h1>
+	<div id='chrono'></div>
 	<div id='scores'></div>
 </body>
 </html>
