@@ -3,20 +3,33 @@ from os.path import abspath, dirname
 
 from gevent import monkey, queue; monkey.patch_all()
 from hashlib import md5
-from time import time
+from time import time,sleep
 from bottle import route, request, response
 import bottle # for static_file, redirect, run
 import json
 
+from ScoreBoardFake import ScoreBoard
+
 root_dir = abspath(dirname(argv[0]))
+config_dir = dirname(root_dir) + "/config/"
 static_dir = root_dir + "/static/"
 content_dir = root_dir + "/content/"
 
 # TODO : read a json file with user:password list
-users = {
-    'rsc' : 'wasquehal',
-    'pif' : 'paf'
-}
+with open(config_dir + "users.json") as json_data:
+    users = json.load(json_data)
+with open(config_dir + "chronos.json") as json_data:
+    chronos = json.load(json_data)
+
+sb = ScoreBoard(14, 15)
+
+def sendAll():
+    eventQueue.put({
+        'Minutes': sb.Minutes, 'Seconds': sb.Seconds,
+        'BL': sb.BL, 'FL': sb.FL,
+        'BV': sb.BV, 'FV': sb.FV,
+        'Buzzer': sb.Buzzer
+    })
 
 class Session:
     id = None
@@ -56,6 +69,7 @@ def main_page():
     if session is None:
         bottle.redirect("/scoreboard/static/login.html")
     else:
+        sendAll()
         return bottle.static_file("main.html", root = content_dir)
 
 
@@ -76,13 +90,11 @@ eventQueue = queue.Queue()
 
 @route('/scoreboard/poll')
 def poll():
-    if getSession(request) is None: bottle.abort(401, "Sorry, access denied.") 
-    # how to send data from other functions ?
-    while True:
-        print "polling ..."
-        item = eventQueue.get()
-        print "polling sent", item
-        yield json.dumps(item)
+    if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.") 
+    print "polling ..."
+    item = eventQueue.get()
+    print "polling sent", item
+    return json.dumps(item)
 
 
 @route('/scoreboard/static/<path:path>')
@@ -96,9 +108,27 @@ def static(path):
 def action(action, value):
     if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.")
     print "action", action, value
-    # todo : handle action
-    # todo : if fail, enqueue error message
-    eventQueue.put({action: value})
+    if action in ('Minutes', 'Seconds', 'BL', 'FL', 'BV', 'FV', 'Buzzer'):
+        sb.set(**{action: value})
+        eventQueue.put({action: value})
+    else:
+        eventQueue.put({error: "Unknown action"})
+ 
+
+@route('/scoreboard/<action>')
+def action(action):
+    if getSession(request) is None: return bottle.abort(401, "Sorry, access denied.")
+    print "action", action
+    if action == 'refresh':
+        sendAll()
+    elif action == 'test':
+        sb.test()
+    elif action == 'blank':
+        sb.blank()
+    elif action == 'chronos':
+        bottle.static_file('chronos.json', root = config_dir)    
+    else:
+        eventQueue.put({error: "Unknown action"})
 
 
 @route('/<any>')

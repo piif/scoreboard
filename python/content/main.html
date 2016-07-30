@@ -10,21 +10,33 @@
 	}
 	.digitsblock {
 		display: inline-block;
-		margin-left: 3ex;
+		margin-left: 2em;
 		border: solid 1px;
+	}
+	.digitsblock input {
+		text-align: right;
+	}
+	#tools {
+		border: dotted 1px gray;
+		position: absolute;
+		right: 0.5em;
+		top: 0.5ex
 	}
 	</style>
 </head>
+
 <body>
 	<script src='/scoreboard/static/jquery-3.1.0.js'></script>
 	<script>
+	var currentPoll = null;
+
 	function setError(msg) {
 		$("#message").html(msg);
 	}
 	function poll() {
 		var poll_interval=0;
 	
-		$.ajax({
+		currentPoll = $.ajax({
 			url: "/scoreboard/poll",
 			type: 'GET',
 			dataType: 'json',
@@ -42,10 +54,28 @@
 		});
 	}
 	function handleMessage(data) {
-		$('#message').html(data)
+		if (data == null) {
+			console.warn("null");
+			return;
+		}
+		if (data == "") {
+			console.warn("empty");
+			return;
+		}
+		console.log(data);
+		for (k in data) {
+			if (k == 'error') {
+				setError(data[k])
+			} else {
+				$('#'+k)
+					.val(data[k])
+					.removeClass('waiting').addClass('onscreen');
+			}
+		}
+		$('#message').html("<pre>message " + JSON.stringify(data) + "</pre>");
 	}
 
-	function addScore(name, len) {
+	function addScoreButton(name, len) {
 		var html = $('<div>')
 			.addClass('digitsblock')
 			.attr('id', name+'_block');
@@ -63,7 +93,7 @@
 				.attr('type', 'text')
 				.attr('id', name)
 				.attr('size', len)
-				.val('0')
+				.val('-')
 		);
 		html.append(
 			$('<input>')
@@ -77,12 +107,32 @@
 		$('#scores').append(html);
 	}
 
+	function addToolsButton(action) {
+		$('#tools').append(
+			$('<input>')
+				.attr('type', 'button')
+				.attr('id', action)
+				.val(action)
+				.addClass(action)
+				.click(function(){
+					$('.digits').addClass('waiting').removeClass('onscreen');
+					$.ajax({
+						url: '/scoreboard/' + action,
+						type: 'GET',
+						error: function(xhr, status, error) {
+							setError("Can't " + action + " : " + status + "/" + error);
+						}
+					});
+				})
+		);
+	}
+
 	$( document ).ready(function() {
 		// add scores button
-		addScore('FL', 1);
-		addScore('BL', 2);
-		addScore('FV', 1);
-		addScore('BV', 2);
+		addScoreButton('FL', 1);
+		addScoreButton('BL', 2);
+		addScoreButton('FV', 1);
+		addScoreButton('BV', 2);
 		// handle +/-
 		$('.plus').click(function() {
 			var rel = $(this).attr('rel');
@@ -104,6 +154,11 @@
 				var rel = target.attr('id')
 				changeValue(rel, target);
 			});
+
+		addToolsButton('refresh');
+		addToolsButton('test');
+		addToolsButton('blank');
+		// TODO : a button to reload page ?
 
 		poll('/scoreboard/poll');
 	});
@@ -129,9 +184,13 @@
 
 	</script>
 	<div id='message'></div>
+	<div id='tools'></div>
 
 	<h1>Let's go ...</h1>
-	<div id='chrono'></div>
+	<div id='chrono' class="digitsblock">
+		<input id="Minutes" class="digits" type="text" size="2" value="--">&nbsp;:&nbsp;
+		<input id="Seconds" class="digits" type="text" size="2" value="--">
+	</div>
 	<div id='scores'></div>
 </body>
 </html>

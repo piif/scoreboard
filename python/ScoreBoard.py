@@ -77,7 +77,7 @@ class ScoreBoard:
 	FL = 0
 	Minutes = 0
 	Seconds = 0
-	Buzzer = 0
+	Buzzer = False
 
 	timer = None
 	chronoRunning = False
@@ -97,7 +97,7 @@ class ScoreBoard:
 		elif value == '+':
 			return before + 1
 		else:
-			return value
+			return int(value)
 
 	def set(self, BV=None, BL=None,
 		FV=None, FL=None,
@@ -116,7 +116,7 @@ class ScoreBoard:
 		if Seconds is not None:
 			self.Seconds = self._setValue(self.Seconds, Seconds)
 		if Buzzer is not None:
-			self.Buzzer = Buzzer
+			self.Buzzer = bool(Buzzer)
 		self.update()
 
 	def startChrono(self, minutes, seconds = 0):
