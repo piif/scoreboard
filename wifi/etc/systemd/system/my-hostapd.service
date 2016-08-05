@@ -1,0 +1,12 @@
+.include /run/systemd/generator.late/hostapd.service
+
+[Unit]
+Requires=wifi-portal.service
+After=wifi-portal.service
+
+[Service]
+Environment=DAEMON_OPTS=-d
+ExecStartPre=sleep 2
+
+[Install]
+WantedBy=multi-user.target

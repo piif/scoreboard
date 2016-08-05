@@ -1,0 +1,14 @@
+[Unit]
+Description=The python ScoreBoard HTTP Server
+After=network.target
+After=wifi-portal.service
+
+[Service]
+Type=simple
+
+ExecStart=/home/pi/scoreboard/python/WebServer.py
+ExecStop=/bin/kill ${MAINPID}
+
+[Install]
+WantedBy=multi-user.target
+
