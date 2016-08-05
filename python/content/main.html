@@ -46,14 +46,14 @@
 </head>
 
 <body>
-	<script src='/scoreboard/static/jquery-3.1.0.js'></script>
+	<script src='/static/jquery-3.1.0.js'></script>
 	<script>
 	var currentPoll = null;
 
 	var chronoList = null;
 
 	function iconpath(action) {
-		return '/scoreboard/static/img/' + action + '.png';
+		return '/static/img/' + action + '.png';
 	}
 
 	function setError(msg) {
@@ -63,7 +63,7 @@
 		var poll_interval=0;
 	
 		currentPoll = $.ajax({
-			url: "/scoreboard/poll",
+			url: "/poll",
 			type: 'GET',
 			dataType: 'json',
 			success: function(data) {
@@ -99,7 +99,7 @@
 	playpause = function(state) {
 		if (state === "pause") {
 			// send pause
-			send('/scoreboard/pause', "Can't stop chrono");
+			send('/pause', "Can't stop chrono");
 			// set icon to 'unpause'
 			$("#playpause")
 				.removeClass('pause').addClass('play')
@@ -107,7 +107,7 @@
 				.attr('title', 'play')
 		} else if (state === "play") {
 			// send unpause
-			send('/scoreboard/play', "Can't restart chrono");
+			send('/play', "Can't restart chrono");
 			// set icon to 'pause'
 			$("#playpause")
 				.addClass('pause').removeClass('play')
@@ -153,7 +153,7 @@
 		if (onclick == null) {
 			onclick = function(){
 				$('.digits').addClass('waiting').removeClass('onscreen');
-				send('/scoreboard/' + action, "Can't " + action);
+				send('/' + action, "Can't " + action);
 			};
 		}
 		$('#tools').append(
@@ -183,7 +183,7 @@
 					.addClass('start')
 					.click(function() {
 						var time = $(this).attr('rel');
-						send('/scoreboard/start/' + time, "Can't start chrono");
+						send('/start/' + time, "Can't start chrono");
 						playpause("play");
 					})
 				);
@@ -248,7 +248,7 @@
 
 		addChrono();
 		$.ajax({
-			url: "/scoreboard/chronos",
+			url: "/chronos",
 			type: 'GET',
 			dataType: 'json',
 			success: function(data) {
@@ -291,14 +291,14 @@
 		addToolsButton('blank');
 		addToolsButton('reset', function() {
 			if (confirm("Tout ré-initialiser ?")) {
-				send('/scoreboard/reset', "Can't reset");
+				send('/reset', "Can't reset");
 			}
 		});
 		addToolsButton('reload', function(){
 			window.location.reload();
 		});
 
-		poll('/scoreboard/poll');
+		poll('/poll');
 	});
 
 	function changeValue(rel, target, delta) {
@@ -307,7 +307,7 @@
 			value += delta;
 		}
 
-		send('/scoreboard/' + rel + '/' + value, "Can't set " + rel + " to " + value);
+		send('/' + rel + '/' + value, "Can't set " + rel + " to " + value);
 		target.addClass('waiting').removeClass('onscreen');
 	}
 

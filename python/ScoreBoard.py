@@ -53,8 +53,8 @@ def pause(n):
 	#print ((after - before) * 1000), "ms"
 
 class ScoreBoard:
-	data = None
-	clock = None
+	clockPort = None
+	dataPort = None
 
 	digits = (
 	 '0000111111', # 0
@@ -71,53 +71,77 @@ class ScoreBoard:
 	buzzerOn  = '1000000000'
 	buzzerOff = '0000000000'
 
-	BV = 0
-	BL = 0
-	FV = 0
-	FL = 0
-	Minutes = 0
-	Seconds = 0
-	Buzzer = False
+	dataInitialValues = {
+		"BV" : 0,
+		"BL" : 0,
+		"FV" : 0,
+		"FL" : 0,
+		"Minutes": 0,
+		"Seconds": 0,
+		"Buzzer" : False
+	}
+	data = dataInitialValues.copy()
 
 	timer = None
 	chronoRunning = False
 
 	clockDelay = 50
 	dataDelay = 5
+	
+	onModifiedCallback = None
 
-	def __init__(self, clock, data):
-		self.clock = GpioPort(clock)
-		self.clock.high()
-		self.data = GpioPort(data)
+	def __init__(self, clock, data, onModifiedCallback = None):
+		self.onModifiedCallback = onModifiedCallback
+		self.clockPort = GpioPort(clock)
+		self.clockPort.high()
+		self.dataPort = GpioPort(data)
 		self.update()
 
-	def _setValue(self, before, value):
+	def reset(self):
+		self.stopChrono()
+		self.data = self.dataInitialValues.copy()
+		self.update()
+
+	def _setValue(self, entry, value):
 		if value == '-':
-			return before - 1
+			if self.data[entry] > 0:
+				self.data[entry] -= 1
+				return True
 		elif value == '+':
-			return before + 1
+			return True
+			self.data[entry] += 1
 		else:
-			return int(value)
+			if entry == 'Buzzer':
+				newValue = bool(value)
+			else:
+				newValue = int(value)
+			if self.data[entry] != newValue:
+				self.data[entry] = newValue
+				return True
+		return False
 
 	def set(self, BV=None, BL=None,
 		FV=None, FL=None,
 		Minutes=None, Seconds=None,
 		Buzzer=None):
+		modified = False
 		if BV is not None:
-			self.BV = self._setValue(self.BV, BV)
+			modified |= self._setValue("BV", BV)
 		if BL is not None:
-			self.BL = self._setValue(self.BL, BL)
+			modified |= self._setValue("BL", BL)
 		if FV is not None:
-			self.FV = self._setValue(self.FV, FV)
+			modified |= self._setValue("FV", FV)
 		if FL is not None:
-			self.FL = self._setValue(self.FL, FL)
+			modified |= self._setValue("FL", FL)
 		if Minutes is not None:
-			self.Minutes = self._setValue(self.Minutes, Minutes)
+			modified |= self._setValue("Minutes", Minutes)
 		if Seconds is not None:
-			self.Seconds = self._setValue(self.Seconds, Seconds)
+			modified |= self._setValue("Seconds", Seconds)
 		if Buzzer is not None:
-			self.Buzzer = bool(Buzzer)
-		self.update()
+			modified |= self._setValue("Buzzer", Seconds)
+		if modified:
+			self.update()
+		return modified
 
 	def startChrono(self, minutes, seconds = 0):
 		self.stopChrono()
@@ -126,7 +150,7 @@ class ScoreBoard:
 		self.timer = thread.start_new_thread(self._tick, ())
 
 	def restartChrono(self):
-		self.startChrono(self.Minutes, self.Seconds)
+		self.startChrono(self.data["Minutes"], self.data["Seconds"])
 
 	def _tick(self):
 		while self.chronoRunning:
@@ -138,7 +162,8 @@ class ScoreBoard:
 			seconds = remain % 60
 			minutes = int(remain / 60)
 
-			self.set(Minutes = minutes, Seconds = seconds)
+			if self.set(Minutes = minutes, Seconds = seconds) and self.onModifiedCallback:
+				self.onModifiedCallback()
 			if remain == 0:
 				self.chronoRunning = False
 
@@ -168,27 +193,27 @@ class ScoreBoard:
 	def update(self):
 		toSend = ''
 		# BVu;
-		toSend += self.digits[self.BV % 10]
+		toSend += self.digits[self.data["BV"] % 10]
 		# BVd;
-		toSend += self.digits[int(self.BV / 10)]
+		toSend += self.digits[int(self.data["BV"] / 10)]
 		# FV;
-		toSend += self.digits[self.FV]
+		toSend += self.digits[self.data["FV"]]
 		# BLu;
-		toSend += self.digits[self.BL % 10]
+		toSend += self.digits[self.data["BL"] % 10]
 		# BLd;
-		toSend += self.digits[int(self.BL / 10)]
+		toSend += self.digits[int(self.data["BL"] / 10)]
 		# FL;
-		toSend += self.digits[self.FL]
+		toSend += self.digits[self.data["FL"]]
 		# Md;
-		toSend += self.digits[int(self.Minutes / 10)]
+		toSend += self.digits[int(self.data["Minutes"] / 10)]
 		# Mu;
-		toSend += self.digits[self.Minutes % 10]
+		toSend += self.digits[self.data["Minutes"] % 10]
 		# Sd;
-		toSend += self.digits[int(self.Seconds / 10)]
+		toSend += self.digits[int(self.data["Seconds"] / 10)]
 		# Su;
-		toSend += self.digits[self.Seconds % 10]
+		toSend += self.digits[self.data["Seconds"] % 10]
 		# Bz;
-		if self.Buzzer:
+		if self.data["Buzzer"]:
 			toSend += self.buzzerOn
 		else:
 			toSend += self.buzzerOff
@@ -198,17 +223,17 @@ class ScoreBoard:
 		#print "Sending", len(str), "bits"
 		before = time()
 		for c in str:
-			self.data.file.write(c)
+			self.dataPort.file.write(c)
 			pause(self.dataDelay)
-			self.clock.low()
+			self.clockPort.low()
 			pause(self.clockDelay)
-			self.clock.high()
+			self.clockPort.high()
 			pause(self.clockDelay)
 		after = time()
 		#print "Took", ((after - before) * 1000), "ms"
 
 if __name__ == '__main__':
-	sb = ScoreBoard(14,15)
+	sb = ScoreBoard(14, 15)
 	sb.test()
 	sb.startChrono(0, 10)
 	sleep(12)

@@ -24,7 +24,7 @@ class ScoreBoard:
 	
 	onModifiedCallback = None
 
-	def __init__(self, _c, _d, onModifiedCallback):
+	def __init__(self, _c, _d, onModifiedCallback = None):
 		self.onModifiedCallback = onModifiedCallback
 		self.update()
 
