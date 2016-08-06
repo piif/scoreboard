@@ -30,7 +30,7 @@ cmdArgs = parser.parse_args()
 
 def LOG(*args):
     if cmdArgs.verbose:
-        print args
+        print ' '.join(str(a) for a in args) 
 
 root_dir = abspath(dirname(argv[0]))
 config_dir = dirname(root_dir) + "/config/"
@@ -128,7 +128,8 @@ def default(any):
 
 
 def main():
-    bottle.run(host='0.0.0.0', port=cmdArgs.listenPort, server="gevent", debug=cmdArgs.verbose)
+    bottle.run(host='0.0.0.0', port=cmdArgs.listenPort, server="gevent",
+               quiet=not cmdArgs.verbose, debug=cmdArgs.verbose)
 
 if __name__ == '__main__':
     main()
