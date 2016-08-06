@@ -10,13 +10,27 @@ from sys import argv
 from os.path import abspath, dirname
 
 from gevent import monkey, queue; monkey.patch_all()
-from hashlib import md5
 from time import time,sleep
 from bottle import route, request, response
 import bottle # for static_file, redirect, run
 import json
 
-from ScoreBoard import ScoreBoard
+import argparse
+from symbol import argument
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--fake', dest = 'fake', action='store_const',
+                    const = True, default = False, help = "fake mode")
+parser.add_argument('--port', type = int, dest = 'listenPort',
+                    default = 9090, help = "listen port")
+parser.add_argument('--verbose', dest = 'verbose', action='store_const',
+                    const = True, default = False, help = "log more")
+# TODO : add config_dir, static_dir, content_dir
+cmdArgs = parser.parse_args()
+
+def LOG(*args):
+    if cmdArgs.verbose:
+        print args
 
 root_dir = abspath(dirname(argv[0]))
 config_dir = dirname(root_dir) + "/config/"
@@ -36,7 +50,15 @@ def updateChrono():
         'Minutes': sb.data["Minutes"], 'Seconds': sb.data["Seconds"]
     })
 
-sb = ScoreBoard(14, 15, onModifiedCallback = updateChrono)
+
+#from ScoreBoard import ScoreBoard
+if cmdArgs.fake:
+    LOG("Fake ScoreBoard")
+    ScoreBoardFake = __import__("ScoreBoardFake")
+    sb = ScoreBoardFake.ScoreBoardFake(onModifiedCallback = updateChrono)
+else:
+    ScoreBoardImpl = __import__("ScoreBoardImpl")
+    sb = ScoreBoardImpl.ScoreBoardImpl(14, 15, onModifiedCallback = updateChrono)
 
 def sendAll():
     eventQueue.put({
@@ -53,22 +75,22 @@ def main_page():
 
 @route('/poll')
 def poll():
-    print "polling ..."
+    LOG("polling ...")
     item = eventQueue.get()
-    print "polling sent", item
+    LOG("polling sent", item)
     return json.dumps(item)
 
 
 @route('/static/<path:path>')
 def static(path):
-    print "static", path
+    LOG("static", path)
     # send it (method handles file check)
     return bottle.static_file(path, root = static_dir)    
  
 
 @route('/<action>')
 def action(action):
-    print "action", action
+    LOG("action", action)
     if action == 'refresh':
         sendAll()
     elif action == 'pause':
@@ -90,7 +112,7 @@ def action(action):
 
 @route('/<action>/<value>')
 def action(action, value):
-    print "action", action, value
+    LOG("action", action, value)
     if action in ('Minutes', 'Seconds', 'BL', 'FL', 'BV', 'FV', 'Buzzer'):
         sb.set(**{action: value})
         eventQueue.put({action: value})
@@ -106,7 +128,7 @@ def default(any):
 
 
 def main():
-    bottle.run(host='0.0.0.0', port=9090, server="gevent", debug=True)
+    bottle.run(host='0.0.0.0', port=cmdArgs.listenPort, server="gevent", debug=cmdArgs.verbose)
 
 if __name__ == '__main__':
     main()
