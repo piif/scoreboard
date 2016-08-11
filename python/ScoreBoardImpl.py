@@ -57,6 +57,9 @@ class ScoreBoardImpl(ScoreBoard):
 	clockPort = None
 	dataPort = None
 
+	clockDelay = 50
+	dataDelay = 5
+
 	digits = (
 	 '0000111111', # 0
 	 '0000000110', # 1

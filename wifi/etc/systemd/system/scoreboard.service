@@ -6,7 +6,7 @@ After=wifi-portal.service
 [Service]
 Type=simple
 
-ExecStart=/home/pi/scoreboard/python/WebServer.py
+ExecStart=/home/pi/scoreboard/python/WebServer.py --port 80
 ExecStop=/bin/kill ${MAINPID}
 
 [Install]
