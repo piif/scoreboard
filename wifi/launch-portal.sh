@@ -18,8 +18,8 @@ ifconfig $INT_IF $IP_CAPTIVE_PORTAL up
 echo "Setting iptables rules"
 
 # iptables rules to redirect everything to portal web server
-/sbin/iptables -t nat -I PREROUTING -i $INT_IF -p tcp --dport 80 -j DNAT --to-destination $IP_CAPTIVE_PORTAL:$PORT_CAPTIVE_PORTAL
-/sbin/iptables -t nat -I PREROUTING -i $INT_IF -p udp --dport 53 -j DNAT --to-destination $IP_CAPTIVE_PORTAL
+#/sbin/iptables -t nat -I PREROUTING -i $INT_IF -p tcp --dport 80 -j DNAT --to-destination $IP_CAPTIVE_PORTAL:$PORT_CAPTIVE_PORTAL
+#/sbin/iptables -t nat -I PREROUTING -i $INT_IF -p udp --dport 53 -j DNAT --to-destination $IP_CAPTIVE_PORTAL
 
 echo "Done."
 

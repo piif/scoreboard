@@ -1,0 +1,7 @@
+
+export IP_CAPTIVE_PORTAL=192.168.42.1
+export PORT_CAPTIVE_PORTAL=80
+export PHY=phy0
+export INT_IF=myAP
+
+
