@@ -73,10 +73,10 @@ class ScoreBoardImpl(ScoreBoard):
 	buzzerOff = '0000000000'
 
 	def __init__(self, clock, data, onModifiedCallback = None):
-        self.clockPort = GpioPort(clock)
-        self.clockPort.high()
-        self.dataPort = GpioPort(data)
-        ScoreBoard.__init__(self, onModifiedCallback)
+		self.clockPort = GpioPort(clock)
+		self.clockPort.high()
+		self.dataPort = GpioPort(data)
+		ScoreBoard.__init__(self, onModifiedCallback)
 
 	def blank(self):
 		toSend = '0' * 110
@@ -135,3 +135,11 @@ class ScoreBoardImpl(ScoreBoard):
 			pause(self.clockDelay)
 		after = time()
 		#print "Took", ((after - before) * 1000), "ms"
+
+
+if __name__ == '__main__':
+	sb = ScoreBoardImpl(15, 14)
+	sb.test()
+	sb.startChrono(0, 10)
+	sleep(12)
+	sb.blank()

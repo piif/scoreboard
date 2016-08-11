@@ -57,8 +57,8 @@ if cmdArgs.fake:
     ScoreBoardFake = __import__("ScoreBoardFake")
     sb = ScoreBoardFake.ScoreBoardFake(onModifiedCallback = updateChrono)
 else:
-    ScoreBoardImpl = __import__("ScoreBoardImpl")
-    sb = ScoreBoardImpl.ScoreBoardImpl(14, 15, onModifiedCallback = updateChrono)
+    ScoreBoardImpl = __import__("ScoreBoardImpl2")
+    sb = ScoreBoardImpl.ScoreBoardImpl(onModifiedCallback = updateChrono)
 
 def sendAll():
     eventQueue.put({
