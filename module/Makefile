@@ -3,7 +3,7 @@ ifeq (${PI_KERNEL},)
   $(error PI_KERNEL variable must be defined to point to pi kernel sources)
 endif
 
-obj-m := demo.o
+obj-m := demo.o scoreboard.o
 PWD := $(shell pwd)
 
 CROSS_OPTIONS:=ARCH=arm CROSS_COMPILE=arm-linux-gnu-
@@ -15,3 +15,6 @@ clean:
 
 Module.symvers:
 	ln -sf ${PI_KERNEL}/Module.symvers Module.symvers
+
+install: all
+	scp *.ko pi:
