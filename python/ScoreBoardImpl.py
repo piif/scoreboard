@@ -57,6 +57,9 @@ class ScoreBoardImpl(ScoreBoard):
 	clockPort = None
 	dataPort = None
 
+	clockDelay = 50
+	dataDelay = 5
+
 	digits = (
 	 '0000111111', # 0
 	 '0000000110', # 1
@@ -73,10 +76,10 @@ class ScoreBoardImpl(ScoreBoard):
 	buzzerOff = '0000000000'
 
 	def __init__(self, clock, data, onModifiedCallback = None):
-        self.clockPort = GpioPort(clock)
-        self.clockPort.high()
-        self.dataPort = GpioPort(data)
-        ScoreBoard.__init__(self, onModifiedCallback)
+		self.clockPort = GpioPort(clock)
+		self.clockPort.high()
+		self.dataPort = GpioPort(data)
+		ScoreBoard.__init__(self, onModifiedCallback)
 
 	def blank(self):
 		toSend = '0' * 110

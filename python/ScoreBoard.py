@@ -20,9 +20,6 @@ class ScoreBoard:
 	timer = None
 	chronoRunning = False
 
-	clockDelay = 50
-	dataDelay = 5
-	
 	onModifiedCallback = None
 
 	def __init__(self, onModifiedCallback = None):
