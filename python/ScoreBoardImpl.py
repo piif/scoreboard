@@ -138,3 +138,11 @@ class ScoreBoardImpl(ScoreBoard):
 			pause(self.clockDelay)
 		after = time()
 		#print "Took", ((after - before) * 1000), "ms"
+
+
+if __name__ == '__main__':
+	sb = ScoreBoardImpl(14, 15)
+	sb.test()
+	sb.startChrono(0, 10)
+	sleep(12)
+	sb.blank()
