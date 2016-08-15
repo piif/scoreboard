@@ -141,7 +141,7 @@ class ScoreBoardImpl(ScoreBoard):
 
 
 if __name__ == '__main__':
-	sb = ScoreBoardImpl(14, 15)
+	sb = ScoreBoardImpl(15, 14)
 	sb.test()
 	sb.startChrono(0, 10)
 	sleep(12)
