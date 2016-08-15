@@ -9,7 +9,34 @@
 //#include <linux/vmalloc.h>
 #include <linux/cdev.h>
 //#include <mach/platform.h>
-//#include <asm/uaccess.h>
+#include <asm/uaccess.h>
+
+// TODO : how to detect "PI 2" ?
+#ifdef RI_2
+#define RASPBERRY_PI_PERI_BASE 0x20000000
+#else
+#define RASPBERRY_PI_PERI_BASE 0x20000000
+#endif
+
+#define SCOREBOARD_CLOCK 15
+#define SCOREBOARD_DATA  14
+
+#define GPIO_BASE (RASPBERRY_PI_PERI_BASE + 0x00200000)
+
+#define GPIO_SEL_0_9_REG 0
+#define GPIO_SEL_10_19_REG 1
+#define GPIO_SEL_20_29_REG 2
+
+#define GPIO_SEL_INPUT  0
+#define GPIO_SEL_OUTPUT 1
+
+#define GPIO_SET_REG 7
+#define GPIO_CLR_REG 10
+
+#define GPIO_SET(PIN) do { gpio_registers[GPIO_SET_REG] = 1 << (PIN); } while(0)
+#define GPIO_CLR(PIN) do { gpio_registers[GPIO_CLR_REG] = 1 << (PIN); } while(0)
+
+uint32_t *gpio_registers;
 
 static int dev_open(struct inode *, struct file *);
 static int dev_close(struct inode *, struct file *);
@@ -77,6 +104,8 @@ static int send_data(uint8_t len, uint8_t *buffer) {
 **/
 int init_module(void) {
 	int res, my_major;
+	uint32_t *sel;
+	uint8_t shift;
 
 	res = alloc_chrdev_region(&devno, 0, 1, "scoreboard");
 	if (res < 0) {
@@ -84,6 +113,25 @@ int init_module(void) {
 		return res;
 	}
 	my_major = MAJOR(devno);
+
+	gpio_registers = (uint32_t *)ioremap(GPIO_BASE, 40);
+
+	// set clock as output
+	sel = &(gpio_registers[SCOREBOARD_CLOCK / 10]);
+	shift = (SCOREBOARD_CLOCK % 10) * 3;
+	*sel = (*sel & ~(7 << shift)) | (1 << shift);
+
+	// set data as output
+	sel = &(gpio_registers[SCOREBOARD_DATA / 10]);
+	shift = (SCOREBOARD_DATA % 10) * 3;
+	*sel = (*sel & ~(7 << shift)) | (1 << shift);
+
+	// TODO : send HIGH to clock and data
+	GPIO_SET(SCOREBOARD_CLOCK);
+	GPIO_SET(SCOREBOARD_DATA);
+
+//	ticker = (uint32_t *)ioremap(0x20003004, 4);
+//	armtick = (uint32_t *)ioremap(0x2000b400, 0x24);
 
 	cdev_init(&my_cdev, &fops);
 	my_cdev.owner = THIS_MODULE;
@@ -97,18 +145,12 @@ int init_module(void) {
 		printk("scoreboard: device %d:0 ready\n", my_major);
 	}
 
-	// TODO : send LOW to clock
-
-//	data = (uint32_t *)ioremap(0x20200034, 4);
-//	ticker = (uint32_t *)ioremap(0x20003004, 4);
-//	armtick = (uint32_t *)ioremap(0x2000b400, 0x24);
-
 	return 0;
 }
 
 
 void cleanup_module(void) {
-//	iounmap(data);
+	iounmap(gpio_registers);
 //	iounmap(ticker);
 //	iounmap(armtick);
 	cdev_del(&my_cdev);
@@ -126,18 +168,38 @@ static int dev_open(struct inode *inod,struct file *fil) {
 // not used ?
 static ssize_t dev_read(struct file *filp,char *buf,size_t count,loff_t *f_pos) {
 	DEBUG("scoreboard: device read ignored\n");
-
-	return count;
+	return -EFAULT;
 }
 
 static ssize_t dev_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
+	size_t i;
 	DEBUG("scoreboard: device write %d bytes from %d\n", count, (int)(*f_pos));
 
-	while(*f_pos < count) {
-		DEBUG("scoreboard: device write byte %d\n", buf[*f_pos]);
-		(*f_pos)++;
+	if (*f_pos >= count) {
+		return 0;
 	}
-	return count; // or count - initial value of *f_pos ?
+	buf += *f_pos;
+	count -= *f_pos;
+
+	for(i = 0; i < count; i++) {
+		if (*buf & 1) {
+			DEBUG("scoreboard: set clock\n");
+			gpio_registers[GPIO_SET_REG] = 0xffff;
+			GPIO_SET(SCOREBOARD_CLOCK);
+		} else {
+			DEBUG("scoreboard: clr clock\n");
+			GPIO_CLR(SCOREBOARD_CLOCK);
+		}
+		if (*buf & 2) {
+			DEBUG("scoreboard: set data\n");
+			GPIO_SET(SCOREBOARD_DATA);
+		} else {
+			DEBUG("scoreboard: clr data\n");
+			GPIO_CLR(SCOREBOARD_DATA);
+		}
+//		DEBUG("scoreboard: gpio set/clr = %08lx,%08lx\n", (unsigned long)gpio_registers[7], (unsigned long)gpio_registers[10]);
+	}
+	return count;
 }
 
 static int dev_close(struct inode *inod,struct file *fil) {
