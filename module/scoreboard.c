@@ -21,7 +21,9 @@
 #define SCOREBOARD_CLOCK 15
 #define SCOREBOARD_DATA  14
 
-#define GPIO_BASE (RASPBERRY_PI_PERI_BASE + 0x00200000)
+#define GPIO_BASE (RASPBERRY_PI_PERI_BASE + 0x200000)
+#define TIMER_BASE (RASPBERRY_PI_PERI_BASE + 0x3000 + 4)
+#define INT_BASE (RASPBERRY_PI_PERI_BASE + 0xB000)
 
 #define GPIO_SEL_0_9_REG 0
 #define GPIO_SEL_10_19_REG 1
@@ -37,6 +39,7 @@
 #define GPIO_CLR(PIN) do { gpio_registers[GPIO_CLR_REG] = 1 << (PIN); } while(0)
 
 uint32_t *gpio_registers;
+uint64_t  *timer_register;
 
 static int dev_open(struct inode *, struct file *);
 static int dev_close(struct inode *, struct file *);
@@ -49,10 +52,6 @@ static struct file_operations fops =  {
 	.write = dev_write,
 	.release = dev_close,
 };
-
-//static volatile uint32_t *data;
-//static volatile uint32_t *ticker;
-//static volatile uint32_t *armtick;
 
 #define DEBUG(msg, ...) printk(msg, ##__VA_ARGS__)
 
@@ -114,7 +113,8 @@ int init_module(void) {
 	}
 	my_major = MAJOR(devno);
 
-	gpio_registers = (uint32_t *)ioremap(GPIO_BASE, 40);
+	gpio_registers  = (uint32_t *)ioremap(GPIO_BASE, 40);
+	timer_register = (uint64_t *)ioremap(TIMER_BASE, 8);
 
 	// set clock as output
 	sel = &(gpio_registers[SCOREBOARD_CLOCK / 10]);
@@ -129,9 +129,6 @@ int init_module(void) {
 	// TODO : send HIGH to clock and data
 	GPIO_SET(SCOREBOARD_CLOCK);
 	GPIO_SET(SCOREBOARD_DATA);
-
-//	ticker = (uint32_t *)ioremap(0x20003004, 4);
-//	armtick = (uint32_t *)ioremap(0x2000b400, 0x24);
 
 	cdev_init(&my_cdev, &fops);
 	my_cdev.owner = THIS_MODULE;
@@ -151,8 +148,8 @@ int init_module(void) {
 
 void cleanup_module(void) {
 	iounmap(gpio_registers);
-//	iounmap(ticker);
-//	iounmap(armtick);
+	iounmap(timer_register);
+
 	cdev_del(&my_cdev);
 	unregister_chrdev_region(devno, 1);
 	DEBUG("scoreboard: module unloaded\n");
@@ -167,8 +164,19 @@ static int dev_open(struct inode *inod,struct file *fil) {
 
 // not used ?
 static ssize_t dev_read(struct file *filp,char *buf,size_t count,loff_t *f_pos) {
-	DEBUG("scoreboard: device read ignored\n");
-	return -EFAULT;
+	char timer_str[18];
+	DEBUG("scoreboard: device read %d bytes from %d\n", count, (int)(*f_pos));
+	if (count > 17) {
+		count = 17;
+	}
+	if (*f_pos >= count) {
+		return 0;
+	}
+	sprintf(timer_str, "%016llx\n", (unsigned long long)(*timer_register));
+	if (copy_to_user(&(buf[*f_pos]), &(timer_str[*f_pos]), count - *f_pos)) {
+		return -EFAULT;
+	}
+	return count - *f_pos;
 }
 
 static ssize_t dev_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
