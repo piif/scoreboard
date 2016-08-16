@@ -25,12 +25,17 @@
 #define TIMER_BASE (RASPBERRY_PI_PERI_BASE + 0x3000 + 4)
 #define INT_BASE (RASPBERRY_PI_PERI_BASE + 0xB000)
 
+#define GPIO_SEL_REGS 0
 #define GPIO_SEL_0_9_REG 0
 #define GPIO_SEL_10_19_REG 1
 #define GPIO_SEL_20_29_REG 2
 
-#define GPIO_SEL_INPUT  0
-#define GPIO_SEL_OUTPUT 1
+#define GPIO_SET_INPUT(PIN) \
+	do { gpio_registers[GPIO_SEL_REGS + PIN / 10] = gpio_registers[GPIO_SEL_REGS + PIN / 10] \
+		& ~(7 << (((PIN) % 10) * 3)); } while(0)
+#define GPIO_SET_OUTPUT(PIN) \
+	do { gpio_registers[GPIO_SEL_REGS + PIN / 10] = (gpio_registers[GPIO_SEL_REGS + PIN / 10] \
+		& ~(7 << (((PIN) % 10) * 3))) | (1 << (((PIN) % 10) * 3)); } while(0)
 
 #define GPIO_SET_REG 7
 #define GPIO_CLR_REG 10
@@ -38,8 +43,8 @@
 #define GPIO_SET(PIN) do { gpio_registers[GPIO_SET_REG] = 1 << (PIN); } while(0)
 #define GPIO_CLR(PIN) do { gpio_registers[GPIO_CLR_REG] = 1 << (PIN); } while(0)
 
-uint32_t *gpio_registers;
-uint64_t  *timer_register;
+static volatile uint32_t *gpio_registers;
+static volatile uint64_t  *timer_register;
 
 static int dev_open(struct inode *, struct file *);
 static int dev_close(struct inode *, struct file *);
@@ -53,7 +58,7 @@ static struct file_operations fops =  {
 	.release = dev_close,
 };
 
-#define DEBUG(msg, ...) printk(msg, ##__VA_ARGS__)
+#define DEBUG(msg, ...) //printk(msg, ##__VA_ARGS__)
 
 static dev_t devno;
 static struct cdev my_cdev;
@@ -77,34 +82,61 @@ uint16_t charToBits(char c) {
 	}
 }
 
-/**
-static int send_data(uint8_t len, uint8_t *buffer) {
+uint32_t wait_until(uint32_t micros) {
+	static uint64_t chrono;
+
+	if (micros == 0) {
+		chrono = *timer_register;
+		DEBUG("timer : init chrono to %8llx\n", (unsigned long long)chrono);
+		return 0;
+	} else {
+		uint64_t tick; //affect to a variable to avoid compiler to optimise code into infinite while(true) ...
+		chrono += micros;
+		DEBUG("timer : wait chrono %8llx to %8llx\n", (unsigned long long)*timer_register, (unsigned long long)chrono);
+//		while (*timer_register < chrono);
+//		return *timer_register - chrono;
+		do {
+			tick = *timer_register;
+		} while (tick < chrono);
+		return *timer_register - chrono;
+	}
+}
+
+static void send_data(uint8_t len, const char *buffer) {
 	local_irq_disable();
 	local_fiq_disable();
-	start_time = *ticker;
-	start_tick = armtick[8];
+
+	// initialize chrono
+	wait_until(0);
 
 	// len * 10 loops
-	for (;len;len--, buffer++) {
-		uint16_t bits = charToBits(*buffer);
-		for(uint16_t mask = 0x200; mask; mask>>=1) {
-			do { t1 = *ticker; } while (t1 == t);
-			// clock + one bit to send to *data
-			*data = (bits & mask ? 1 : 0);
+	while(len--) {
+		uint16_t mask, bits = charToBits(*buffer);
+		for(mask = 0x200; mask; mask>>=1) {
+			// set data
+			if(bits & mask) {
+				GPIO_CLR(SCOREBOARD_DATA);
+			} else {
+				GPIO_SET(SCOREBOARD_DATA);
+			}
+			// wait
+			wait_until(50);
+			// set clock low
+			GPIO_SET(SCOREBOARD_CLOCK);
+			// wait
+			wait_until(50);
+			// set clock high
+			GPIO_CLR(SCOREBOARD_CLOCK);
 		}
+		buffer++;
 	}
 
-	end_tick = armtick[8];
 	local_fiq_enable();
 	local_irq_enable();
-
-	return 0;
 }
-**/
+
 int init_module(void) {
 	int res, my_major;
-	uint32_t *sel;
-	uint8_t shift;
 
 	res = alloc_chrdev_region(&devno, 0, 1, "scoreboard");
 	if (res < 0) {
@@ -116,19 +148,13 @@ int init_module(void) {
 	gpio_registers  = (uint32_t *)ioremap(GPIO_BASE, 40);
 	timer_register = (uint64_t *)ioremap(TIMER_BASE, 8);
 
-	// set clock as output
-	sel = &(gpio_registers[SCOREBOARD_CLOCK / 10]);
-	shift = (SCOREBOARD_CLOCK % 10) * 3;
-	*sel = (*sel & ~(7 << shift)) | (1 << shift);
+	// set clock and data as output
+	GPIO_SET_OUTPUT(SCOREBOARD_CLOCK);
+	GPIO_SET_OUTPUT(SCOREBOARD_DATA);
 
-	// set data as output
-	sel = &(gpio_registers[SCOREBOARD_DATA / 10]);
-	shift = (SCOREBOARD_DATA % 10) * 3;
-	*sel = (*sel & ~(7 << shift)) | (1 << shift);
-
-	// TODO : send HIGH to clock and data
-	GPIO_SET(SCOREBOARD_CLOCK);
-	GPIO_SET(SCOREBOARD_DATA);
+	// set clock HIGH (output is inverted by voltage converter between PI and scoreboard
+	// -> CLR means HIGH / SET means LOW)
+	GPIO_CLR(SCOREBOARD_CLOCK);
 
 	cdev_init(&my_cdev, &fops);
 	my_cdev.owner = THIS_MODULE;
@@ -180,34 +206,36 @@ static ssize_t dev_read(struct file *filp,char *buf,size_t count,loff_t *f_pos) 
 }
 
 static ssize_t dev_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
-	size_t i;
+//	size_t i;
 	DEBUG("scoreboard: device write %d bytes from %d\n", count, (int)(*f_pos));
 
 	if (*f_pos >= count) {
 		return 0;
 	}
-	buf += *f_pos;
-	count -= *f_pos;
-
-	for(i = 0; i < count; i++) {
-		if (*buf & 1) {
-			DEBUG("scoreboard: set clock\n");
-			gpio_registers[GPIO_SET_REG] = 0xffff;
-			GPIO_SET(SCOREBOARD_CLOCK);
-		} else {
-			DEBUG("scoreboard: clr clock\n");
-			GPIO_CLR(SCOREBOARD_CLOCK);
-		}
-		if (*buf & 2) {
-			DEBUG("scoreboard: set data\n");
-			GPIO_SET(SCOREBOARD_DATA);
-		} else {
-			DEBUG("scoreboard: clr data\n");
-			GPIO_CLR(SCOREBOARD_DATA);
-		}
-//		DEBUG("scoreboard: gpio set/clr = %08lx,%08lx\n", (unsigned long)gpio_registers[7], (unsigned long)gpio_registers[10]);
-	}
-	return count;
+//	buf += *f_pos;
+//	count -= *f_pos;
+//
+//	for(i = 0; i < count; i++) {
+//		if (*buf & 1) {
+//			DEBUG("scoreboard: set clock\n");
+//			gpio_registers[GPIO_SET_REG] = 0xffff;
+//			GPIO_SET(SCOREBOARD_CLOCK);
+//		} else {
+//			DEBUG("scoreboard: clr clock\n");
+//			GPIO_CLR(SCOREBOARD_CLOCK);
+//		}
+//		if (*buf & 2) {
+//			DEBUG("scoreboard: set data\n");
+//			GPIO_SET(SCOREBOARD_DATA);
+//		} else {
+//			DEBUG("scoreboard: clr data\n");
+//			GPIO_CLR(SCOREBOARD_DATA);
+//		}
+////		DEBUG("scoreboard: gpio set/clr = %08lx,%08lx\n", (unsigned long)gpio_registers[7], (unsigned long)gpio_registers[10]);
+//	}
+//	return count;
+	send_data(count - *f_pos, buf + *f_pos);
+	return count - *f_pos;
 }
 
 static int dev_close(struct inode *inod,struct file *fil) {
