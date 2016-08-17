@@ -62,6 +62,7 @@ static struct file_operations fops =  {
 
 static dev_t devno;
 static struct cdev my_cdev;
+static uint16_t framesSent;
 
 uint16_t charToBits(char c) {
 	switch(c) {
@@ -90,7 +91,7 @@ uint32_t wait_until(uint32_t micros) {
 		DEBUG("timer : init chrono to %8llx\n", (unsigned long long)chrono);
 		return 0;
 	} else {
-		uint64_t tick; //affect to a variable to avoid compiler to optimise code into infinite while(true) ...
+		uint64_t tick; //affect to a variable to avoid compiler to optimize code into infinite while(true) ...
 		chrono += micros;
 		DEBUG("timer : wait chrono %8llx to %8llx\n", (unsigned long long)*timer_register, (unsigned long long)chrono);
 //		while (*timer_register < chrono);
@@ -102,22 +103,23 @@ uint32_t wait_until(uint32_t micros) {
 	}
 }
 
-static void send_data(uint8_t len, const char *buffer) {
+static void send_data(size_t len, const char *buffer) {
 	local_irq_disable();
 	local_fiq_disable();
 
 	// initialize chrono
 	wait_until(0);
 
+	GPIO_CLR(SCOREBOARD_CLOCK);
 	// len * 10 loops
 	while(len--) {
 		uint16_t mask, bits = charToBits(*buffer);
 		for(mask = 0x200; mask; mask>>=1) {
 			// set data
 			if(bits & mask) {
-				GPIO_CLR(SCOREBOARD_DATA);
-			} else {
 				GPIO_SET(SCOREBOARD_DATA);
+			} else {
+				GPIO_CLR(SCOREBOARD_DATA);
 			}
 			// wait
 			wait_until(50);
@@ -129,7 +131,9 @@ static void send_data(uint8_t len, const char *buffer) {
 			GPIO_CLR(SCOREBOARD_CLOCK);
 		}
 		buffer++;
+		framesSent++;
 	}
+	GPIO_SET(SCOREBOARD_CLOCK);
 
 	local_fiq_enable();
 	local_irq_enable();
@@ -140,7 +144,7 @@ int init_module(void) {
 
 	res = alloc_chrdev_region(&devno, 0, 1, "scoreboard");
 	if (res < 0) {
-		printk(KERN_WARNING "scoreboard: Can't allocated device number\n");
+		printk(KERN_WARNING "scoreboard: Can't allocate device number\n");
 		return res;
 	}
 	my_major = MAJOR(devno);
@@ -168,6 +172,8 @@ int init_module(void) {
 		printk("scoreboard: device %d:0 ready\n", my_major);
 	}
 
+	framesSent = 0;
+
 	return 0;
 }
 
@@ -188,9 +194,11 @@ static int dev_open(struct inode *inod,struct file *fil) {
 	return 0;
 }
 
-// not used ?
+// for debug purpose : return timer 1MHz value in hex text and send to kernel log
+// how many frames where sent since insmod
 static ssize_t dev_read(struct file *filp,char *buf,size_t count,loff_t *f_pos) {
 	char timer_str[18];
+	printk("scoreboard: %d frames sent\n", framesSent);
 	DEBUG("scoreboard: device read %d bytes from %d\n", count, (int)(*f_pos));
 	if (count > 17) {
 		count = 17;
@@ -206,34 +214,11 @@ static ssize_t dev_read(struct file *filp,char *buf,size_t count,loff_t *f_pos) 
 }
 
 static ssize_t dev_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
-//	size_t i;
 	DEBUG("scoreboard: device write %d bytes from %d\n", count, (int)(*f_pos));
 
 	if (*f_pos >= count) {
 		return 0;
 	}
-//	buf += *f_pos;
-//	count -= *f_pos;
-//
-//	for(i = 0; i < count; i++) {
-//		if (*buf & 1) {
-//			DEBUG("scoreboard: set clock\n");
-//			gpio_registers[GPIO_SET_REG] = 0xffff;
-//			GPIO_SET(SCOREBOARD_CLOCK);
-//		} else {
-//			DEBUG("scoreboard: clr clock\n");
-//			GPIO_CLR(SCOREBOARD_CLOCK);
-//		}
-//		if (*buf & 2) {
-//			DEBUG("scoreboard: set data\n");
-//			GPIO_SET(SCOREBOARD_DATA);
-//		} else {
-//			DEBUG("scoreboard: clr data\n");
-//			GPIO_CLR(SCOREBOARD_DATA);
-//		}
-////		DEBUG("scoreboard: gpio set/clr = %08lx,%08lx\n", (unsigned long)gpio_registers[7], (unsigned long)gpio_registers[10]);
-//	}
-//	return count;
 	send_data(count - *f_pos, buf + *f_pos);
 	return count - *f_pos;
 }
