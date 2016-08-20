@@ -1,29 +1,67 @@
-<html>
+ <!DOCTYPE html>
+ <html>
 <head>
+	<!--meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no"-->
 	<title>ScoreBoard Main Page</title>
 	<style>
+	/* thanks to http://www.alsacreations.com/article/lire/1490-comprendre-le-viewport-dans-le-web-mobile.html */
+	@viewport {
+	   width: device-width;
+	   zoom: 1;
+	}
 	.waiting {
 		color: orange;
 	}
 	.onscreen {
 		color: green;
 	}
-	.digitsblock, #chrono {
+	.digitsblock {
 		display: inline-block;
 		margin-bottom: 1ex;
 		padding: 5px;
 	}
+	#scores  {
+		margin-left: 1em;
+	}
 	#chrono, #scores  {
+		text-align: center;
+		margin-bottom: 1ex;
+		padding: 5px;
 		margin-left: 1em;
 	}
 	.digitsblock input, #chrono input {
 		text-align: center;
 	}
-	#tools {
+	#headerwrapper {
+		/*display: inline-block;
+		position: relative;*/
+		text-align: center;
+	}
+	#header {
+		position: relative;
+		display: inline-block;
+	}
+	.title {
+		vertical-align: middle;
+		font-size: 3ex;
+		font-weight: bold;
+	}
+	#settingsMenu {
 		border: dotted 1px gray;
+		background-color: #d0d0d0;
+		text-align: right;
+		padding: 0.5ex;
+
 		position: absolute;
-		right: 0.5em;
-		top: 0.5ex
+		right: 0;
+		top: 4ex;
+	}
+	#settingsMenu label {
+		display: inline-block;
+	}
+	#settingsMenu img {
+		position: relative;
+		right: 0;
 	}
 	#scores > div {
 		display: inline-block;
@@ -43,11 +81,23 @@
 		vertical-align: middle;
 	}
 	</style>
-</head>
 
-<body>
 	<script src='/static/jquery-3.1.0.js'></script>
 	<script>
+	// light version of https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Objets_globaux/String/repeat
+	if (!String.prototype.repeat) {
+		String.prototype.repeat = function (count) {
+			var str = "" + this , res = "";
+			if (count == 0 || str.length == 0) {
+				return "";
+			}
+			while(count--) {
+				res += str;
+			}
+			return res;
+		}
+	}
+  
 	var currentPoll = null;
 
 	var chronoList = null;
@@ -58,14 +108,17 @@
 
 	function setError(msg) {
 		$("#message").html(msg);
+		setTimeout(function () { $("#message").html(""); }, 2000);
 	}
+
 	function poll() {
-		var poll_interval=0;
-	
+		var poll_interval=100;
 		currentPoll = $.ajax({
 			url: "/poll",
 			type: 'GET',
+			cache: false,
 			dataType: 'json',
+			timeout: 30000,
 			success: function(data) {
 				handleMessage(data);
 				poll_interval=0;
@@ -91,23 +144,27 @@
 			}
 		}
 		if (data.Minutes === 0 && data.Seconds === 0) {
-			playpause("pause");
+			playpause("pause", false);
 		}
 		//$('#message').html("<pre>message " + JSON.stringify(data) + "</pre>");
 	}
 
-	playpause = function(state) {
+	playpause = function(state, doSend) {
 		if (state === "pause") {
-			// send pause
-			send('/pause', "Can't stop chrono");
+			if (doSend !== false) {
+				// send pause
+				send('/pause', "Can't stop chrono");
+			}
 			// set icon to 'unpause'
 			$("#playpause")
 				.removeClass('pause').addClass('play')
 				.attr('src', iconpath('play'))
 				.attr('title', 'play')
 		} else if (state === "play") {
-			// send unpause
-			send('/play', "Can't restart chrono");
+			if (doSend !== false) {
+				// send unpause
+				send('/play', "Can't restart chrono");
+			}
 			// set icon to 'pause'
 			$("#playpause")
 				.addClass('pause').removeClass('play')
@@ -122,21 +179,21 @@
 			.attr('id', name+'_block');
 		html.append(
 			prefix
-			,
+		,
 			$('<img>')
 				.addClass('minus')
 				.attr('src', iconpath('minus'))
 				.attr('id', name+'_minus')
 				.attr('rel', name)
 				.attr('title', '-')
-			,
+		,
 			$('<input>')
 				.addClass('digits')
 				.attr('type', 'text')
 				.attr('id', name)
 				.attr('size', len)
 				.val('_'.repeat(len))
-			,
+		,
 			$('<img>')
 				.addClass('plus')
 				.attr('src', iconpath('plus'))
@@ -146,23 +203,45 @@
 		);
 
 		return html;
-		//$('#scores').append(html);
 	}
 
-	function addToolsButton(action, onclick) {
-		if (onclick == null) {
+	function addHeaderButton(action, onclick) {
+		if (onclick == undefined) {
 			onclick = function(){
 				$('.digits').addClass('waiting').removeClass('onscreen');
 				send('/' + action, "Can't " + action);
 			};
 		}
-		$('#tools').append(
+		$('#header').append(
 			$('<img>')
 				.attr('src', iconpath(action))
 				.attr('id', action)
 				.attr('title', action)
 				.addClass(action)
 				.click(onclick)
+		);
+	}
+	function addSettingsButton(action, onclick) {
+		if (onclick == undefined) {
+			onclick = function(){
+				$('.digits').addClass('waiting').removeClass('onscreen');
+				send('/' + action, "Can't " + action);
+			};
+		}
+		$('#settingsMenu').append(
+			$('<div>').append(
+				$('<label>' + action + '</label>')
+			,
+				$('<img>')
+					.attr('src', iconpath(action))
+					.attr('id', action)
+					.attr('title', action)
+					.addClass(action)
+					.click(function() {
+						onclick();
+						$('#settingsMenu').hide();
+					})
+			)
 		);
 	}
 
@@ -284,25 +363,47 @@
 				var target = $(this);
 				var rel = target.attr('id')
 				changeValue(rel, target);
-			});
+			}
+		);
 
-		addToolsButton('refresh');
-		addToolsButton('test');
-		addToolsButton('blank');
-		addToolsButton('reset', function() {
+		addHeaderButton('refresh');
+		addHeaderButton('settings', function() { $('#settingsMenu').toggle(); });
+		$('#settingsMenu').hide();
+		addSettingsButton('reload', function(){
+			window.location.reload();
+		});
+		addSettingsButton('test');
+		addSettingsButton('blank');
+		addSettingsButton('reset', function() {
 			if (confirm("Tout ré-initialiser ?")) {
 				send('/reset', "Can't reset");
 			}
 		});
-		addToolsButton('reload', function(){
-			window.location.reload();
+		addSettingsButton('shutdown', function() {
+			if (confirm("Éteindre l'écran et la console ?")) {
+				send('/shutdown', "Can't shutdown");
+			}
+		});
+		addSettingsButton('language', function() {
+			alert("Todo ...");
+		});
+		addSettingsButton('password', function() {
+			alert("Todo ...");
+		});
+		addSettingsButton('upgrade', function() {
+			alert("Todo ...");
 		});
 
 		poll('/poll');
+		send('/refresh');
 	});
 
+	function toggleSettings() {
+		console.log("Todo ...")
+	}
+
 	function changeValue(rel, target, delta) {
-		var value = Number.parseInt(target.val());
+		var value = parseInt(target.val());
 		if (delta != null) {
 			value += delta;
 		}
@@ -315,17 +416,18 @@
 		$.ajax({
 			url: action,
 			type: 'GET',
+			cache: false,
 			error: function(xhr, status, error) {
 				setError(errorMessage + " : " + status + "/" + error);
 			}
 		});
 	}
 	</script>
-	<div id='message'></div>
-	<div id='tools'></div>
-
-	<h1>Score board</h1>
+</head>
+<body>
+	<div id='headerwrapper'><div id='header'><span class='title'>Score board</span> <div id='settingsMenu'></div></div></div>
 	<div id='chrono'></div>
 	<div id='scores'></div>
+	<div id='message'></div>
 </body>
 </html>
