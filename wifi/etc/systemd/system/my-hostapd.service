@@ -5,8 +5,9 @@ Requires=wifi-portal.service
 After=wifi-portal.service
 
 [Service]
-Environment=DAEMON_OPTS=-d
-ExecStartPre=sleep 2
+Environment="DAEMON_OPTS=-f /var/log/hostapd.log -t"
+#Environment="DAEMON_OPTS=-d -f /var/log/hostapd.log -t"
+#ExecStartPre=sleep 2
 
 [Install]
 WantedBy=multi-user.target

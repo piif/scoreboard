@@ -1,7 +1,6 @@
+# some variables about captive portal configuration
 
-export IP_CAPTIVE_PORTAL=192.168.42.1
-export PORT_CAPTIVE_PORTAL=80
-export PHY=phy0
-export INT_IF=myAP
-
-
+export PORTAL_PHY=phy0
+export PORTAL_INTF=myAP
+export PORTAL_IP=192.168.42.1
+export PORTAL_PORT=80
