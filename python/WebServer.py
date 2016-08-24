@@ -1,23 +1,23 @@
 #!/usr/bin/env python
-# TODO
-# ajouter readme sur dir des icones
-# revoir config portail captif, notamment gerer un dns fake ?
-# jQuery light pour mobile ?
-#  voir deja si ca demarre avec la version slim ?
-# comment debugger le probleme des cookies ?
 
 from sys import argv
+import argparse
+
 from os.path import abspath, dirname
+from time import time,sleep
 
 from gevent import monkey, queue, getcurrent, GreenletExit; monkey.patch_all()
-from time import time,sleep
 from bottle import route, request, response
 import bottle # for static_file, redirect, run
-import json
 
-import argparse
-from symbol import argument
-from setroubleshoot import serverconnection
+import json, re
+
+
+def LOG(*args):
+    if cmdArgs.verbose:
+        print ' '.join(str(a) for a in args) 
+
+# parse command line arguments
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--fake', dest = 'fake', action='store_const',
@@ -29,21 +29,45 @@ parser.add_argument('--verbose', dest = 'verbose', action='store_const',
 # TODO : add config_dir, static_dir, content_dir
 cmdArgs = parser.parse_args()
 
-def LOG(*args):
-    if cmdArgs.verbose:
-        print ' '.join(str(a) for a in args) 
-
+# set some directories
 root_dir = abspath(dirname(argv[0]))
 config_dir = dirname(root_dir) + "/config/"
 static_dir = root_dir + "/static/"
 content_dir = root_dir + "/content/"
 
-# TODO : read a json file with user:password list
-with open(config_dir + "users.json") as json_data:
-    users = json.load(json_data)
-# with open(config_dir + "chronos.json") as json_data:
-#     chronos = json.load(json_data)
+if cmdArgs.fake:
+    # in fake mode don't write password in /
+    system_dir = dirname(root_dir) + "/system/etc/"
+else:
+    # in "real" mode write directly into /etc
+    system_dir = "/etc/"
 
+
+def shutdown():
+    sb.blank()
+    subprocess.call("/usr/sbin/halt -p", shell=True)
+    exit(0)
+
+
+def changePassword(old, new):
+    r = re.compile(r'^wpa_passphrase=(.*)$', re.M)
+    with open(system_dir + "hostapd/hostapd.conf", "r") as hostfile:
+        content = hostfile.read()
+
+    m = r.search(content)
+    if m is None:
+        return "password config not found"
+    if old != m.group(1):
+        return "old password doesn't match"
+    
+    content = r.sub("wpa_passphrase=" + new, content)
+    with open(system_dir + "hostapd/hostapd.conf", "w") as hostfile:
+        hostfile.write(content)
+  
+    return "Password changed"
+
+
+# handle an event queue to maintain long polling on client until there's something to send
 eventQueue = None
 
 def enQueue(data):
@@ -61,13 +85,14 @@ def initQueue():
     eventQueue = queue.Queue()
 
 
+# scoreboard implementation will call this function every chrono tick
 def updateChrono():
     enQueue({
         'Minutes': sb.data["Minutes"], 'Seconds': sb.data["Seconds"]
     })
 
 
-#from ScoreBoard import ScoreBoard
+# import ScoreBoard implementation depending of fake mode or not
 if cmdArgs.fake:
     LOG("Fake ScoreBoard")
     ScoreBoardFake = __import__("ScoreBoardFake")
@@ -85,6 +110,10 @@ def currentState():
         'Buzzer': sb.data["Buzzer"]
     }
 
+
+#
+# beginning of routing functions
+#
 
 @route('/')
 def main_page():
@@ -125,17 +154,14 @@ def action(action):
         sb.reset()
         enQueue(currentState())
     elif action == 'shutdown':
-        sb.blank()
-        print "Shutdown : TODO ..."
+        shutdown()
     elif action == 'upgrade':
+        # TODO : http://bottlepy.org/docs/dev/tutorial.html#file-uploads
         print "Upgrade : TODO ..."
-    elif action == 'password':
-        print "Set password : TODO ..."
     elif action == 'chronos':
         return bottle.static_file('chronos.json', root = config_dir)    
     else:
         bottle.redirect("/")
-        return
 
 
 @route('/<action>/<value>')
@@ -146,11 +172,14 @@ def action(action, value):
         enQueue({action: value})
     elif action == "start":
         sb.startChrono(int(int(value) / 60), int(value) % 60)
+    elif action == 'password':
+        print "Set password : TODO ..."
+        (old, new) = value.split(':')
+        result = changePassword(old, new)
+        enQueue( { 'error' : result } )
     else:
         bottle.redirect("/")
-        return
-    
-    return {}
+
 
 @route('/<any:path>')
 def default(any):
@@ -158,6 +187,9 @@ def default(any):
     bottle.redirect("/")
 
 
-if __name__ == '__main__':
-    bottle.run(host='0.0.0.0', port=cmdArgs.listenPort, server="gevent",
-               quiet=not cmdArgs.verbose, debug=cmdArgs.verbose)
+#
+# end of routing functions
+#
+
+bottle.run(host='0.0.0.0', port=cmdArgs.listenPort, server="gevent",
+           quiet=not cmdArgs.verbose, debug=cmdArgs.verbose)

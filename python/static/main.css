@@ -1,0 +1,102 @@
+/* thanks to http://www.alsacreations.com/article/lire/1490-comprendre-le-viewport-dans-le-web-mobile.html */
+@viewport {
+ 	width: device-width;
+ 	zoom: 1;
+}
+
+.waiting {
+	color: orange;
+}
+.onscreen {
+	color: green;
+}
+.digitsblock {
+	display: inline-block;
+	margin-bottom: 1ex;
+	padding: 5px;
+}
+#scores  {
+	margin-left: 1em;
+}
+#chrono, #scores  {
+	text-align: center;
+	margin-bottom: 1ex;
+	padding: 5px;
+	margin-left: 1em;
+}
+.digitsblock input, #chrono input {
+	text-align: center;
+}
+#headerwrapper {
+	/*display: inline-block;
+	position: relative;*/
+	text-align: center;
+}
+#header {
+	position: relative;
+	display: inline-block;
+}
+.title {
+	vertical-align: middle;
+	font-size: 3ex;
+	font-weight: bold;
+}
+#settingsMenu {
+	border: dotted 1px gray;
+	background-color: #d0d0d0;
+	text-align: right;
+	padding: 0.5ex;
+
+	position: absolute;
+	right: 0;
+	top: 4ex;
+}
+#settingsMenu label {
+	display: inline-block;
+}
+#settingsMenu img {
+	position: relative;
+	right: 0;
+}
+#scores > div {
+	display: inline-block;
+	border: solid 1px;
+}
+label {
+	display: block;
+	text-align: center;
+}
+input {
+	width: 3em;
+}
+/* icons */
+img {
+	width: 3ex;
+	padding: 0.5ex;
+	vertical-align: middle;
+}
+
+/* change password popup */
+#changepasswordwrapper {
+	background-color: #ccc;
+	position: absolute;
+	top: 0; bottom: 0;
+	left: 0; right: 0;
+	text-align: center;
+}
+#changepassword {
+	padding: 1ex;
+	margin: 3ex;
+	display: inline-block;
+	border: solid 2px black;
+}
+#changepassword div {
+	text-align: right;
+}
+#changepassword label {
+	display: inline-block;
+}
+#changepassword input {
+	width: auto;
+}
+
