@@ -67,7 +67,7 @@ class ScoreBoard:
 		if Seconds is not None:
 			modified |= self._setValue("Seconds", Seconds)
 		if Buzzer is not None:
-			modified |= self._setValue("Buzzer", Seconds)
+			modified |= self._setValue("Buzzer", Buzzer)
 		if modified:
 			self.update()
 		return modified

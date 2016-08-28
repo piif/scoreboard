@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=oneshot
 
-ExecStart=/home/pi/scoreboard/wifi/launch-portal.sh
+ExecStart=/home/pi/scoreboard/system/launch-portal.sh
 
 [Install]
 WantedBy=multi-user.target
