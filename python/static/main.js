@@ -12,9 +12,14 @@ if (!String.prototype.repeat) {
 	}
 }
 
+// current ajax poll pending on server
 var currentPoll = null;
 
+// list of chrono times per game category
 var chronoList = null;
+
+// current mute state
+var buzzer = undefined;
 
 function iconpath(action) {
 	return '/static/img/' + action + '.png';
@@ -25,6 +30,19 @@ function setError(msg) {
 	setTimeout(function () { $("#message").html(""); }, 2000);
 }
 
+// send data to server
+function send(action, errorMessage) {
+	$.ajax({
+		url: action,
+		type: 'GET',
+		cache: false,
+		error: function(xhr, status, error) {
+			setError((errorMessage == undefined ? "error" : errorMEssage) + " : " + status + "/" + error);
+		}
+	});
+}
+
+// continuously long poll server
 function poll() {
 	var poll_interval=100;
 	currentPoll = $.ajax({
@@ -46,11 +64,17 @@ function poll() {
 		},
 	});
 }
+
+// handle content returned by server polling
 function handleMessage(data) {
 	console.log(data);
 	for (k in data) {
 		if (k == 'error') {
 			setError(data[k])
+		} else if (k == 'buzzer' && data[k] !== buzzer) {
+			mute(data[k]);
+		} else if (k == 'timeout') {
+			playpauseTimeout(data[k]);
 		} else {
 			$('#'+k)
 				.val(data[k])
@@ -63,7 +87,25 @@ function handleMessage(data) {
 	//$('#message').html("<pre>message " + JSON.stringify(data) + "</pre>");
 }
 
-playpause = function(state, doSend) {
+// handle "mute" setting change
+// 'state' unset means to toggle current value
+var mute = function(state) {
+	if (state != undefined) {
+		buzzer = state;
+	}
+	if (buzzer) {
+		buzzer = true;
+		$("#buzz").attr('src', iconpath('unmute'));
+		updateSettingsButton('buzzer', 'désactiver buzzer', 'mute');
+	} else {
+		buzzer = false;
+		$("#buzz").attr('src', iconpath('mute'));
+		updateSettingsButton('buzzer', 'activer buzzer', 'unmute');
+	}
+};
+
+// handle "playpause" button
+var playpause = function(state, doSend) {
 	if (state === "pause") {
 		if (doSend !== false) {
 			// send pause
@@ -85,8 +127,38 @@ playpause = function(state, doSend) {
 			.attr('src', iconpath('pause'))
 			.attr('title', 'pause')
 	}
+};
+
+// handle "timeout" button
+var playpauseTimeout = function(state) {
+	var t = $("#timeout");
+	if (state === undefined) {
+		state = t.hasClass('stopped')
+	}
+	if (state) {
+		t.addClass('play').removeClass('stopped');
+	} else {
+		t.removeClass('play').addClass('stopped');
+	}
 }
 
+// handle layout setting change
+// 'vertical' unset means to toggle current value
+var setLayout = function(vertical) {
+	var body = $("body")
+	if (vertical === undefined) {
+		vertical = body.hasClass("vertical")
+	}
+	if (vertical) {
+		body.removeClass("vertical");
+		updateSettingsButton('layout', 'mode portrait', 'layout_v');
+	} else {
+		body.addClass("vertical");
+		updateSettingsButton('layout', 'mode paysage', 'layout_h');
+	}
+}
+
+// create a block with label, value and +/- buttons
 function scoreButton(prefix, name, len) {
 	var html = $('<div>')
 		.addClass('digitsblock')
@@ -94,12 +166,14 @@ function scoreButton(prefix, name, len) {
 	html.append(
 		prefix
 	,
+		// "+" is before "-" but displayed on right of inout by "rtl" direction of outer div
+		// with this ugly hack, in vertical layout, "+" stays on top and "-" at bottom
 		$('<img>')
-			.addClass('minus')
-			.attr('src', iconpath('minus'))
-			.attr('id', name+'_minus')
+			.addClass('plus')
+			.attr('src', iconpath('plus'))
+			.attr('id', name+'_plus')
 			.attr('rel', name)
-			.attr('title', '-')
+			.attr('title', '+')
 	,
 		$('<input>')
 			.addClass('digits')
@@ -109,17 +183,28 @@ function scoreButton(prefix, name, len) {
 			.val('_'.repeat(len))
 	,
 		$('<img>')
-			.addClass('plus')
-			.attr('src', iconpath('plus'))
-			.attr('id', name+'_plus')
+			.addClass('minus')
+			.attr('src', iconpath('minus'))
+			.attr('id', name+'_minus')
 			.attr('rel', name)
-			.attr('title', '+')
+			.attr('title', '-')
 	);
 
 	return html;
 }
 
-function addHeaderButton(action, onclick) {
+// callback for +/- buttons
+function changeValue(rel, target, delta) {
+	var value = parseInt(target.val());
+	if (delta != null) {
+		value += delta;
+	}
+
+	send('/' + rel + '/' + value, "Impossible de fixer " + rel + " à " + value);
+	target.addClass('waiting').removeClass('onscreen');
+}
+
+function addHeaderButton(action, label, onclick) {
 	if (onclick == undefined) {
 		onclick = function(){
 			$('.digits').addClass('waiting').removeClass('onscreen');
@@ -130,12 +215,13 @@ function addHeaderButton(action, onclick) {
 		$('<img>')
 			.attr('src', iconpath(action))
 			.attr('id', action)
-			.attr('title', action)
+			.attr('title', label)
 			.addClass(action)
 			.click(onclick)
 	);
 }
-function addSettingsButton(action, onclick) {
+
+function addSettingsButton(action, label, onclick) {
 	if (onclick == undefined) {
 		onclick = function(){
 			$('.digits').addClass('waiting').removeClass('onscreen');
@@ -144,12 +230,12 @@ function addSettingsButton(action, onclick) {
 	}
 	$('#settingsMenu').append(
 		$('<div>').append(
-			$('<label>' + action + '</label>')
+			$('<label>' + label + '</label>')
 		,
 			$('<img>')
 				.attr('src', iconpath(action))
 				.attr('id', action)
-				.attr('title', action)
+				.attr('title', label)
 				.addClass(action)
 				
 		).click(function() {
@@ -159,6 +245,13 @@ function addSettingsButton(action, onclick) {
 	);
 }
 
+function updateSettingsButton(action, label, icon) {
+	var img = $("#" + action);
+	img.attr('src', iconpath(icon));
+	$('label', img.parent()).text(label);
+}
+
+// create buttons for each period durations in timelist current value
 function updateTimeList() {
 	var value = $("#timelist").val();
 	if (value == "manuel") {
@@ -176,16 +269,28 @@ function updateTimeList() {
 				.addClass('start')
 				.click(function() {
 					var time = $(this).attr('rel');
-					send('/start/' + time, "Erreur au démarrage du chrono");
-					playpause("play");
+					send('/setchrono/' + time, "Erreur au démarrage du chrono");
 				})
 			);
 		}
 	}
 }
 
+// create chronos toolbar : buzz, time and playpause button
 function addChrono() {
 	$('#chrono').append(
+		// buzz button
+		$('<img>')
+			.attr('id', 'buzz')
+			.attr('src', iconpath('buzzer'))
+			.attr('title', 'buzz')
+			.addClass('buzz')
+			.click(function() {
+				if (buzzer) {
+					send('/buzz');
+				}
+			})
+		,
 		// time list
 		$('<select>')
 			.attr('id', 'timelist')
@@ -195,38 +300,62 @@ function addChrono() {
 		$('<span>')
 			.attr('id', 'startbuttons')
 		,
-		// digits
-		$('<input>')
-			.attr('type', 'number')
-			.attr('id', 'Minutes')
-			.attr('min', '0').attr('max', '99')
-			.attr('size', '2')
-			.val('__')
-			.addClass('digits')
+		$('<span>').append(
+			// digits
+			$('<input>')
+				.attr('type', 'number')
+				.attr('id', 'Minutes')
+				.attr('min', '0').attr('max', '99')
+				.attr('size', '2')
+				.val('__')
+				.addClass('digits')
+			,
+			$('<span> : </span>')
+			,
+			$('<input>')
+				.attr('type', 'number')
+				.attr('id', 'Seconds')
+				.attr('min', '0').attr('max', '59')
+				.attr('size', '2')
+				.val('__')
+				.addClass('digits')
+		)
 		,
-		$('<span> : </span>')
-		,
-		$('<input>')
-			.attr('type', 'number')
-			.attr('id', 'Seconds')
-			.attr('min', '0').attr('max', '59')
-			.attr('size', '2')
-			.val('__')
-			.addClass('digits')
-		,
-		// pause / play
-		$('<img>')
-			.attr('id', 'playpause')
-			.attr('src', iconpath('play'))
-			.attr('title', 'play')
-			.addClass('play')
-			.click(function() {
-				playpause($(this).hasClass('pause') ? "pause" : "play");
-			})
+		$('<span>').append(
+			// pause / play
+			$('<img>')
+				.attr('id', 'playpause')
+				.attr('src', iconpath('play'))
+				.attr('title', 'play')
+				.addClass('play')
+				.click(function() {
+					playpause($(this).hasClass('pause') ? "pause" : "play");
+				})
+			,
+			// time out call button
+			$('<img>')
+				.attr('id', 'timeout')
+				.attr('src', iconpath('timeout'))
+				.attr('title', 'timeout')
+				.addClass('stopped')
+				.click(function() {
+					send('/timeout');
+					playpause("pause");
+				})
+		)
 	);
 }
 
 $( document ).ready(function() {
+	// TODO : test this code, from
+	// http://stackoverflow.com/questions/4917664/detect-viewport-orientation-if-orientation-is-portrait-display-alert-message-ad
+	// Listen for orientation changes
+	window.addEventListener("orientationchange", function() {
+	  // Announce the new orientation number
+	  alert(window.orientation);
+	}, false);
+
+
 	// add scores button
 	$('#scores').append(
 		$("<div><label>Locaux</label></div>").append(
@@ -240,6 +369,7 @@ $( document ).ready(function() {
 	);
 
 	addChrono();
+	// get times menu
 	$.ajax({
 		url: "/chronos",
 		type: 'GET',
@@ -257,7 +387,7 @@ $( document ).ready(function() {
 		}
 	});
 
-	// handle +/-
+	// handle every +/- buttons
 	$('.plus').click(function() {
 		var rel = $(this).attr('rel');
 		var target = $('#'+rel)
@@ -268,7 +398,7 @@ $( document ).ready(function() {
 		var target = $('#'+rel)
 		changeValue(rel, target, -1);
 	});
-	// and direct input
+	// and direct inputs
 	$('.digits')
 		.focus(function() {
 			$(this).removeClass('waiting').removeClass('onscreen');
@@ -280,32 +410,55 @@ $( document ).ready(function() {
 		}
 	);
 
-	addHeaderButton('refresh');
+	// buttos on top of page
+	addHeaderButton('refresh', 'rafraichir');
+	addHeaderButton('settings', 'paramêtres', function() {
+		$('#settingsMenu').toggle();
+	});
 
+	// and buttons in settings menu
 	$('#settingsMenu').hide();
-	addHeaderButton('settings', function() { $('#settingsMenu').toggle(); });
-
-	addSettingsButton('reload', function(){
+	addSettingsButton('reload', 'recharger', function() {
 		window.location.reload();
 	});
-	addSettingsButton('test');
-	addSettingsButton('blank');
-	addSettingsButton('reset', function() {
+	addSettingsButton('test', 'test écran');
+	addSettingsButton('blank', 'écran éteint');
+
+	addSettingsButton('buzzer', 'buzzer', function() {
+		send('/buzzer/' + (buzzer ? "off" : "on"));
+	});
+
+	addSettingsButton('layout', 'layout', setLayout);
+	if (window.orientation === 0) {
+		setLayout(true);
+	} else {
+		setLayout(false);
+	}
+	addSettingsButton('reset', 'remise à 0', function() {
 		if (confirm("Tout ré-initialiser ?")) {
 			send('/reset', "Can't reset");
 		}
 	});
 
-	addSettingsButton('shutdown', function() {
+	addSettingsButton('shutdown', 'éteindre la console', function() {
 		if (confirm("Éteindre l'écran et la console ?")) {
 			send('/shutdown', "Can't shutdown");
 		}
 	});
 
-	addSettingsButton('language', function() {
+	addSettingsButton('language', 'langue', function() {
 		alert("Todo ...");
 	});
 
+	addSettingsButton('password', 'mot de passe wifi', function() {
+		$("#changepasswordwrapper").show();
+	});
+
+	addSettingsButton('upgrade', 'mise à jour', function() {
+		alert("Todo ...");
+	});
+
+	// password change "popup"
 	$("#changepasswordwrapper").hide();
 	$("#password_cancel").click(function() { $("#changepasswordwrapper").hide(); });
 	$("#password_ok").click(function() {
@@ -322,39 +475,9 @@ $( document ).ready(function() {
 		send("/password/" + oldpass + ":" + newpass);
 		$("#changepasswordwrapper").hide();
 	});
-	addSettingsButton('password', function() {
-		$("#changepasswordwrapper").show();
-	});
 
-	addSettingsButton('upgrade', function() {
-		alert("Todo ...");
-	});
-
+	// finally, launch polling
 	poll('/poll');
+	// and force a first refresh to get initial values
 	send('/refresh');
 });
-
-function toggleSettings() {
-	console.log("Todo ...")
-}
-
-function changeValue(rel, target, delta) {
-	var value = parseInt(target.val());
-	if (delta != null) {
-		value += delta;
-	}
-
-	send('/' + rel + '/' + value, "Impossible de fixer " + rel + " à " + value);
-	target.addClass('waiting').removeClass('onscreen');
-}
-
-function send(action, errorMessage) {
-	$.ajax({
-		url: action,
-		type: 'GET',
-		cache: false,
-		error: function(xhr, status, error) {
-			setError(errorMessage + " : " + status + "/" + error);
-		}
-	});
-}

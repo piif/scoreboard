@@ -11,6 +11,7 @@ from bottle import route, request, response
 import bottle # for static_file, redirect, run
 
 import json, re
+from __builtin__ import True
 
 
 def LOG(*args):
@@ -101,15 +102,43 @@ else:
     ScoreBoardImpl = __import__("ScoreBoardImpl2")
     sb = ScoreBoardImpl.ScoreBoardImpl(onModifiedCallback = updateChrono)
 
+# current state of mute/unmute
+buzzer = True
+
+# current state of timeout chrono
+timeoutRunning = False
+# if timeout running, store main chrono value
+savedChrono = None
+
+def playpauseTimeout():
+    global timeoutRunning, savedChrono
+
+    if timeoutRunning:
+        # stop it and restore main chrono
+        sb.stopChrono()
+        sb.set(Minutes = int(savedChrono / 60), Seconds = savedChrono % 60)
+        timeoutRunning = False
+    else:
+        # save main chrono and set to timeout duration
+        sb.stopChrono()
+        savedChrono = sb.data['Minutes'] * 60 + sb.data['Seconds']
+        sb.set(Minutes = 1, Seconds = 0)
+        timeoutRunning = True
+
+    enQueue({
+        'Minutes': sb.data["Minutes"],
+        'Seconds': sb.data["Seconds"],
+        'timeout': timeoutRunning
+    })
+
 
 def currentState():
     return {
         'Minutes': sb.data["Minutes"], 'Seconds': sb.data["Seconds"],
         'BL': sb.data["BL"], 'FL': sb.data["FL"],
         'BV': sb.data["BV"], 'FV': sb.data["FV"],
-        'Buzzer': sb.data["Buzzer"]
+        'buzzer': buzzer, 'timeout': timeoutRunning
     }
-
 
 #
 # beginning of routing functions
@@ -148,11 +177,15 @@ def action(action):
         sb.restartChrono()
     elif action == 'test':
         sb.test()
+    elif action == 'buzz':
+        sb.buzz()
     elif action == 'blank':
         sb.blank()
     elif action == 'reset':
         sb.reset()
         enQueue(currentState())
+    elif action == 'timeout':
+        playpauseTimeout()
     elif action == 'shutdown':
         shutdown()
     elif action == 'upgrade':
@@ -167,11 +200,24 @@ def action(action):
 @route('/<action>/<value>')
 def action(action, value):
     LOG("action", action, value)
-    if action in ('Minutes', 'Seconds', 'BL', 'FL', 'BV', 'FV', 'Buzzer'):
+
+    if action in ('Minutes', 'Seconds', 'BL', 'FL', 'BV', 'FV'):
         sb.set(**{action: value})
         enQueue({action: value})
-    elif action == "start":
-        sb.startChrono(int(int(value) / 60), int(value) % 60)
+    elif action == "buzzer":
+        if value == "on":
+            buzzer = True
+        else:
+            buzzer = False
+        enQueue({action: buzzer})
+#     elif action == "start":
+#         sb.startChrono(int(int(value) / 60), int(value) % 60)
+    elif action == "setchrono":
+        sb.set(Minutes = int(int(value) / 60), Seconds = int(value) % 60)
+        enQueue({
+            'Minutes': sb.data["Minutes"],
+            'Seconds': sb.data["Seconds"],
+        })
     elif action == 'password':
         print "Set password : TODO ..."
         (old, new) = value.split(':')
