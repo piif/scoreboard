@@ -12,7 +12,7 @@
 	<div id='headerwrapper'><div id='header'><span class='title'>Tableau de scores</span> <div id='settingsMenu'></div></div></div>
 	<div id='chrono'></div>
 	<div id='scores'></div>
-	<div id='message'></div>
+	<div id='message'>{{message if defined("message") else ""}}</div>
 
 	<div id='changepasswordwrapper'>
 	<div id='changepassword'>

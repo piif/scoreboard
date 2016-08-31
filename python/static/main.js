@@ -351,8 +351,11 @@ $( document ).ready(function() {
 	// http://stackoverflow.com/questions/4917664/detect-viewport-orientation-if-orientation-is-portrait-display-alert-message-ad
 	// Listen for orientation changes
 	window.addEventListener("orientationchange", function() {
-	  // Announce the new orientation number
-	  alert(window.orientation);
+		if (window.orientation === 0) {
+			setLayout(false);
+		} else {
+			setLayout(true);
+		}
 	}, false);
 
 
@@ -419,7 +422,7 @@ $( document ).ready(function() {
 	// and buttons in settings menu
 	$('#settingsMenu').hide();
 	addSettingsButton('reload', 'recharger', function() {
-		window.location.reload();
+		window.location = window.location.href;
 	});
 	addSettingsButton('test', 'test écran');
 	addSettingsButton('blank', 'écran éteint');
@@ -430,9 +433,9 @@ $( document ).ready(function() {
 
 	addSettingsButton('layout', 'layout', setLayout);
 	if (window.orientation === 0) {
-		setLayout(true);
-	} else {
 		setLayout(false);
+	} else {
+		setLayout(true);
 	}
 	addSettingsButton('reset', 'remise à 0', function() {
 		if (confirm("Tout ré-initialiser ?")) {
@@ -455,7 +458,7 @@ $( document ).ready(function() {
 	});
 
 	addSettingsButton('upgrade', 'mise à jour', function() {
-		alert("Todo ...");
+		window.location = "/upgrade.html";
 	});
 
 	// password change "popup"

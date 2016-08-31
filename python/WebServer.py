@@ -7,12 +7,12 @@ from os.path import abspath, dirname
 from time import time,sleep
 
 from gevent import monkey, queue, getcurrent, GreenletExit; monkey.patch_all()
-from bottle import route, request, response
+from bottle import route, post, request, response
 import bottle # for static_file, redirect, run
 
 import json, re
 from __builtin__ import True
-import subprocess
+import subprocess, tempfile, zipfile
 
 def LOG(*args):
     if cmdArgs.verbose:
@@ -30,14 +30,17 @@ parser.add_argument('--verbose', dest = 'verbose', action='store_const',
 # TODO : add config_dir, static_dir, content_dir
 cmdArgs = parser.parse_args()
 
-# set some "constants"
-defaultBuzzDuration = 0.2
-
 # set some directories
 root_dir = abspath(dirname(argv[0]))
 config_dir = dirname(root_dir) + "/config/"
 static_dir = root_dir + "/static/"
 content_dir = root_dir + "/content/"
+
+# get/set some "constants"
+defaultBuzzDuration = 0.2
+with open(dirname(root_dir) + "/version.txt") as verFile:
+    version = verFile.read()
+print "version", version
 
 if cmdArgs.fake:
     # in fake mode don't write password in /
@@ -69,6 +72,41 @@ def changePassword(old, new):
         hostfile.write(content)
   
     return "Password changed"
+
+
+def doUpgrade(upgradeFilePath):
+    d = dirname(upgradeFilePath) + "/"
+
+    zip = zipfile.ZipFile(upgradeFilePath, "r")
+    if zip is None:
+        return "format incorrect (zip)"
+
+    try:
+        before = zip.open("before.txt")
+    except KeyError:
+        return "format incorrect (before)"
+    if before.read() != version:
+        return "version actuelle differente"
+    before.close()
+
+    try:
+        zip.getinfo("todo.sh")
+    except KeyError:
+        return "format incorrect (todo)"
+
+    zip.extractall(d)
+    zip.close()
+
+    print "calling", d + "todo.sh"
+    out = open(d + "out.txt", "w")
+    err = open(d + "err.txt", "w")
+    result = subprocess.call(["/bin/bash", d + "todo.sh"],
+                             stdout = out, stderr = err)
+    
+    if result == 0:
+        return "Upgrade OK"
+    else:
+        return "Upgrade failed"
 
 
 # handle an event queue to maintain long polling on client until there's something to send
@@ -147,9 +185,27 @@ def currentState():
 # beginning of routing functions
 #
 
+@post('/')
+def post_page():
+    result = ''
+    if request.forms.get('action') == "OK":
+        file = request.files.get('upgrade')
+        if file is not None:
+            tmpPath = tempfile.mkdtemp()
+            file.save(tmpPath)
+            result = doUpgrade(tmpPath + "/" + file.filename)
+        else:
+            result = "fichier de mise a jour manquant"
+
+    return bottle.template("main", message= result)
+
 @route('/')
 def main_page():
-    return bottle.static_file("main.html", root = content_dir)
+    return bottle.template("main")
+
+@route('/upgrade.html')
+def main_page():
+    return bottle.template("upgrade", currentVersion= version)
 
 
 @route('/poll')
