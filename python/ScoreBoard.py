@@ -1,7 +1,7 @@
 # finally, directly using sysfs access to GPIO is simple and works
 
 from time import sleep, time
-import thread
+import thread, signal
 import math
 
 class ScoreBoard:
@@ -15,6 +15,9 @@ class ScoreBoard:
 		"Seconds": 0,
 		"Buzzer" : False
 	}
+	# duration of buzzing
+	buzzDuration = 0.2
+
 	data = dataInitialValues.copy()
 
 	timer = None
@@ -25,6 +28,7 @@ class ScoreBoard:
 	def __init__(self, onModifiedCallback = None):
 		self.onModifiedCallback = onModifiedCallback
 		self.update()
+		signal.signal(signal.SIGALRM, self.endBuzz)
 
 	def reset(self):
 		self.stopChrono()
@@ -85,19 +89,27 @@ class ScoreBoard:
 		while self.chronoRunning:
 			remain = int(math.ceil(self.endTime - time()))
 			if remain <= 0:
+				self.buzz()
 				self.chronoRunning = False
-				remain = 0
 
 			seconds = remain % 60
 			minutes = int(math.floor(remain / 60))
 
 			if self.set(Minutes = minutes, Seconds = seconds) and self.onModifiedCallback:
 				self.onModifiedCallback()
-			if remain == 0:
-				self.chronoRunning = False
 
 			sleep(0.1)
 		self.timer = None
+
+	def buzz(self):
+		if self.buzzDuration == 0:
+			return
+		self.set(Buzzer = True)
+		signal.setitimer(signal.ITIMER_REAL, self.buzzDuration)
+
+	# sigalarm callback
+	def endBuzz(self, signum, frame):
+		self.set(Buzzer = False)
 
 	def stopChrono(self):
 		if self.timer is not None:

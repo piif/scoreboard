@@ -12,7 +12,7 @@ import bottle # for static_file, redirect, run
 
 import json, re
 from __builtin__ import True
-
+import subprocess
 
 def LOG(*args):
     if cmdArgs.verbose:
@@ -29,6 +29,9 @@ parser.add_argument('--verbose', dest = 'verbose', action='store_const',
                     const = True, default = False, help = "log more")
 # TODO : add config_dir, static_dir, content_dir
 cmdArgs = parser.parse_args()
+
+# set some "constants"
+defaultBuzzDuration = 0.2
 
 # set some directories
 root_dir = abspath(dirname(argv[0]))
@@ -207,8 +210,10 @@ def action(action, value):
     elif action == "buzzer":
         if value == "on":
             buzzer = True
+            sb.buzzDuration = defaultBuzzDuration
         else:
             buzzer = False
+            sb.buzzDuration = 0
         enQueue({action: buzzer})
 #     elif action == "start":
 #         sb.startChrono(int(int(value) / 60), int(value) % 60)
