@@ -36,6 +36,8 @@ config_dir = dirname(root_dir) + "/config/"
 static_dir = root_dir + "/static/"
 content_dir = root_dir + "/content/"
 
+bottle.TEMPLATE_PATH.insert(0, root_dir + "/views/")
+
 # get/set some "constants"
 defaultBuzzDuration = 0.2
 with open(dirname(root_dir) + "/version.txt") as verFile:
